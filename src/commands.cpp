@@ -1110,7 +1110,7 @@ void* OpenStorageWindow(float* x, float* y) {
     uint8_t* gl = GameLoop();
     uint8_t* ui = gl ? *(uint8_t**)(gl + 0x98) : nullptr;
     if (!ui || towns::Count() < 2) return nullptr;
-    float scale = *(float*)(ui + 0xdc);
+    float scale = *(float*)(ui + 0xdc) > 0 ? 1.0f / *(float*)(ui + 0xdc) : 1.0f;  // UI units -> pixels (UI scale 0.9 = units x 1.11)
     void* found = nullptr;
     for (uint8_t* node = *(uint8_t**)ui; node; node = *(uint8_t**)(node + 0x10)) {
         uint8_t* dlg = *(uint8_t**)node;
@@ -1139,7 +1139,7 @@ void* OpenWorkplaceWindow(float* x, float* y) {
     uint8_t* gl = GameLoop();
     uint8_t* ui = gl ? *(uint8_t**)(gl + 0x98) : nullptr;
     if (!ui || towns::Count() < 2) return nullptr;
-    float scale = *(float*)(ui + 0xdc);
+    float scale = *(float*)(ui + 0xdc) > 0 ? 1.0f / *(float*)(ui + 0xdc) : 1.0f;  // UI units -> pixels (UI scale 0.9 = units x 1.11)
     void* found = nullptr;
     for (uint8_t* node = *(uint8_t**)ui; node; node = *(uint8_t**)(node + 0x10)) {
         uint8_t* dlg = *(uint8_t**)node;

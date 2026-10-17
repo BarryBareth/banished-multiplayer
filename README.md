@@ -105,7 +105,7 @@ the line `updatecheck=0` to `Banished\bmp_settings.txt`.
 - [Running a relay server](docs/RELAY.md) and [the bug report receiver](docs/BUG_REPORTS.md).
 - [How it works](docs/HOW_IT_WORKS.md): lockstep, determinism, towns.
 - [Testing](docs/TESTING.md): the multi-instance test tools.
-- [Making a release](docs/RELEASING.md), including the Steam Workshop upload.
+- [Making a release](docs/RELEASING.md), including the Steam Workshop upload, and [texts for mod sites](docs/MOD_PAGES.md).
 
 Third-party code: see [THIRD_PARTY.md](THIRD_PARTY.md).
 

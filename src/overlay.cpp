@@ -18,6 +18,7 @@
 #include "gamedlg.h"
 #include "tint.h"
 #include "commands.h"
+#include "autotest.h"
 #include "common.h"
 #include "MinHook.h"
 #include "imgui.h"
@@ -752,6 +753,73 @@ static void SettlePanel(bool markerOnly) {
 }
 
 // Other towns' buildings and fields: outline + light fill in their town's colour, projected from the world.
+// The outlines are drawn at Present, after the game's own UI - so they're cut around every open game window
+// (UserInterface GameLoop+0x98 list; DialogInstance +0x20 bit 2 = hidden, +0x50 root element, whose +0x68/+0x6c/+0x70/
+// +0x74 = left/top/right/bottom in UI units, / UserInterface+0xdc (the UI scale) = pixels - as DialogInstance::Contains reads them).
+static void GameWindowRects(std::vector<ImVec4>& out, float screenW, float screenH) {
+    out.clear();
+    uint8_t* gl = (uint8_t*)ProbeGameLoop();
+    uint8_t* ui = gl ? *(uint8_t**)(gl + 0x98) : nullptr;
+    if (!ui) return;
+    float scale = *(float*)(ui + 0xdc) > 0 ? 1.0f / *(float*)(ui + 0xdc) : 1.0f;  // UI units -> pixels (UI scale 0.9 = units x 1.11)
+    int guard = 0;
+    for (uint8_t* node = *(uint8_t**)ui; node && guard < 200; node = *(uint8_t**)(node + 0x10), guard++) {
+        uint8_t* dlg = *(uint8_t**)node;
+        if (!dlg || (*(uint32_t*)(dlg + 0x20) & 4)) continue;
+        uint8_t* root = *(uint8_t**)(dlg + 0x50);
+        if (!root) continue;
+        ImVec4 r(*(int*)(root + 0x68) * scale, *(int*)(root + 0x6c) * scale, *(int*)(root + 0x70) * scale, *(int*)(root + 0x74) * scale);
+        if (r.z <= r.x || r.w <= r.y) continue;
+        if ((r.z - r.x) * (r.w - r.y) > 0.5f * screenW * screenH) continue;  // a full-screen container, not a window
+        out.push_back(r);
+    }
+}
+using Poly = std::vector<ImVec2>;
+// Sutherland-Hodgman against one axis-aligned half-plane: keep (axis value < v) if less, else (> v)
+static Poly ClipHalf(const Poly& p, int axis, float v, bool less) {
+    Poly out;
+    auto in = [&](const ImVec2& q) { float c = axis ? q.y : q.x; return less ? c <= v : c >= v; };
+    for (size_t i = 0; i < p.size(); i++) {
+        const ImVec2 &a = p[i], &b = p[(i + 1) % p.size()];
+        bool ia = in(a), ib = in(b);
+        if (ia) out.push_back(a);
+        if (ia != ib) {
+            float ca = axis ? a.y : a.x, cb = axis ? b.y : b.x, t = (v - ca) / (cb - ca);
+            out.push_back(ImVec2(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t));
+        }
+    }
+    return out;
+}
+// convex polygon minus a rectangle = up to 4 convex pieces (left, right, above, below)
+static void SubtractRect(const Poly& p, const ImVec4& r, std::vector<Poly>& out) {
+    Poly pieces[4] = {ClipHalf(p, 0, r.x, true), ClipHalf(p, 0, r.z, false)};
+    Poly mid = ClipHalf(ClipHalf(p, 0, r.x, false), 0, r.z, true);
+    pieces[2] = ClipHalf(mid, 1, r.y, true);
+    pieces[3] = ClipHalf(mid, 1, r.w, false);
+    for (auto& q : pieces) if (q.size() >= 3) out.push_back(q);
+}
+// the parts of segment a-b outside every rectangle (Liang-Barsky for the part inside each, then the rest)
+static void SegmentOutside(ImVec2 a, ImVec2 b, const std::vector<ImVec4>& rects, size_t from, std::vector<std::pair<ImVec2, ImVec2>>& out) {
+    for (size_t k = from; k < rects.size(); k++) {
+        const ImVec4& r = rects[k];
+        float t0 = 0, t1 = 1, dx = b.x - a.x, dy = b.y - a.y;
+        float pp[4] = {-dx, dx, -dy, dy}, qq[4] = {a.x - r.x, r.z - a.x, a.y - r.y, r.w - a.y};
+        bool hit = true;
+        for (int i = 0; i < 4 && hit; i++) {
+            if (pp[i] == 0) { if (qq[i] < 0) hit = false; continue; }
+            float t = qq[i] / pp[i];
+            if (pp[i] < 0) { if (t > t1) hit = false; else if (t > t0) t0 = t; }
+            else { if (t < t0) hit = false; else if (t < t1) t1 = t; }
+        }
+        if (!hit || t1 <= t0) continue;
+        ImVec2 p0(a.x + dx * t0, a.y + dy * t0), p1(a.x + dx * t1, a.y + dy * t1);
+        if (t0 > 0) SegmentOutside(a, p0, rects, k + 1, out);
+        if (t1 < 1) SegmentOutside(p1, b, rects, k + 1, out);
+        return;
+    }
+    out.push_back({a, b});
+}
+
 static void TownColours(const net::UiInfo& u) {
     if (!u.inGame || u.towns < 2 || !tint::Enabled()) return;
     tint::OnPresent();
@@ -760,6 +828,8 @@ static void TownColours(const net::UiInfo& u) {
     if (frame++ % 15 == 0) towns::OtherTownFootprints(prints);
     ImGuiIO& io = ImGui::GetIO();
     ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    static std::vector<ImVec4> windows;
+    GameWindowRects(windows, io.DisplaySize.x, io.DisplaySize.y);
     for (auto& f : prints) {
         float corners[4][3] = {{f.x0, f.y0, f.z + 0.05f}, {f.x1, f.y0, f.z + 0.05f}, {f.x1, f.y1, f.z + 0.05f}, {f.x0, f.y1, f.z + 0.05f}};
         ImVec2 s[4];
@@ -769,8 +839,26 @@ static void TownColours(const net::UiInfo& u) {
         float rgb[3];
         tint::ColorOf(f.town, rgb);
         int r = (int)(rgb[0] * 255), g = (int)(rgb[1] * 255), b = (int)(rgb[2] * 255);
-        dl->AddQuadFilled(s[0], s[1], s[2], s[3], IM_COL32(r, g, b, 45));
-        dl->AddQuad(s[0], s[1], s[2], s[3], IM_COL32(r, g, b, 210), 2.0f * g_scale);
+        ImU32 fill = IM_COL32(r, g, b, 45), line = IM_COL32(r, g, b, 210);
+        float minX = (std::min)({s[0].x, s[1].x, s[2].x, s[3].x}), maxX = (std::max)({s[0].x, s[1].x, s[2].x, s[3].x});
+        float minY = (std::min)({s[0].y, s[1].y, s[2].y, s[3].y}), maxY = (std::max)({s[0].y, s[1].y, s[2].y, s[3].y});
+        std::vector<ImVec4> over;  // windows this footprint touches
+        for (auto& w : windows) if (w.x < maxX && w.z > minX && w.y < maxY && w.w > minY) over.push_back(w);
+        if (over.empty()) {
+            dl->AddQuadFilled(s[0], s[1], s[2], s[3], fill);
+            dl->AddQuad(s[0], s[1], s[2], s[3], line, 2.0f * g_scale);
+            continue;
+        }
+        std::vector<Poly> pieces{Poly(s, s + 4)}, next;
+        for (auto& w : over) {
+            next.clear();
+            for (auto& p : pieces) SubtractRect(p, w, next);
+            pieces.swap(next);
+        }
+        for (auto& p : pieces) dl->AddConvexPolyFilled(p.data(), (int)p.size(), fill);
+        std::vector<std::pair<ImVec2, ImVec2>> segs;
+        for (int k = 0; k < 4; k++) SegmentOutside(s[k], s[(k + 1) % 4], over, 0, segs);
+        for (auto& [a, b] : segs) dl->AddLine(a, b, line, 2.0f * g_scale);
     }
 }
 

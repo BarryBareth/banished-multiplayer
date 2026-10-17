@@ -105,7 +105,7 @@ static SOCKET g_listenSock = INVALID_SOCKET; // host: direct TCP listener
 
 // Every player must run the identical DLL - any code difference can desync. The build id = release number + a hash of
 // this DLL's code section as stored on disk (in memory it is relocated); HELLO carries it, the host turns away others.
-static constexpr const char* kModVersion = "0.9";
+static constexpr const char* kModVersion = "0.9.1";
 static std::string g_fakeVersion;
 static int64_t g_testDropAt = -1;
 static bool g_testCorruptSave;  // bmp_net.txt corruptsave=1 (test): the first save received counts as corrupt

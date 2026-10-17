@@ -380,18 +380,7 @@ PackageFile bmpShare
 }
 '@ | Set-Content "$src\Package.rsc" -Encoding ascii
 
-# icon (48x48 png - the packager insists) and preview (jpg): plain generated images
-Add-Type -AssemblyName System.Drawing
-function Make-Image([string]$path, [int]$w, [int]$h, $format) {
-    $bmp = New-Object System.Drawing.Bitmap $w, $h
-    $g = [System.Drawing.Graphics]::FromImage($bmp)
-    $g.Clear([System.Drawing.Color]::FromArgb(255, 70, 52, 34))
-    $font = New-Object System.Drawing.Font 'Arial', ([float]($h / 4)), ([System.Drawing.FontStyle]::Bold)
-    $brush = [System.Drawing.Brushes]::Wheat
-    $sf = New-Object System.Drawing.StringFormat; $sf.Alignment = 'Center'; $sf.LineAlignment = 'Center'
-    $g.DrawString('MP', $font, $brush, (New-Object System.Drawing.RectangleF 0, 0, $w, $h), $sf)
-    $g.Dispose(); $bmp.Save($path, $format); $bmp.Dispose()
-}
-Make-Image "$src\icon.png" 48 48 ([System.Drawing.Imaging.ImageFormat]::Png)
-Make-Image "$src\preview.jpg" 256 256 ([System.Drawing.Imaging.ImageFormat]::Jpeg)
-"wrote BMP\ShareStrings.rsc, bmpResources.rsc, Package.rsc, icon.png, preview.jpg"
+# icon (48x48 png - the packager insists) and preview (jpg, shown in the Mods menu and on the Workshop): mod\assets.
+# Not part of the mod version hash above, so new pictures don't make the DLL see "another build".
+Copy-Item (Join-Path $PSScriptRoot 'assets\icon.png'), (Join-Path $PSScriptRoot 'assets\preview.jpg') $src -Force
+"wrote BMP\ShareStrings.rsc, bmpResources.rsc, Package.rsc; copied icon.png, preview.jpg"
