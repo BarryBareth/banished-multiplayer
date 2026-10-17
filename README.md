@@ -16,7 +16,8 @@ game that's already running.
 
 ## What you need
 
-- The **Steam version of Banished** (1.0.7, the normal 64-bit game). Other versions are not supported.
+- The **Steam version of Banished** (1.0.7, the normal 64-bit game). The GOG and DRM-free versions are not supported
+  yet: their program file is different, so the mod switches itself off there and says so.
 - Windows 10 or 11.
 - **Everybody in a game needs the same version of this mod.** The game tells you when the host's version differs.
 

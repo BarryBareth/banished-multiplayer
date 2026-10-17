@@ -31,6 +31,7 @@
 #include <map>
 #include <vector>
 #include <algorithm>
+#include <thread>
 
 // exe build this was reverse-engineered against (PE TimeDateStamp, 2017-09-10)
 static const DWORD kExeTimestamp = 0x59b56a2d;
@@ -1295,9 +1296,36 @@ void InstallHooks() {
     Hook(m_RandTol, (void*)h_RandTol, (void**)&o_RandTol);
 
     auto nt = (IMAGE_NT_HEADERS*)((uint8_t*)exe + ((IMAGE_DOS_HEADER*)exe)->e_lfanew);
-    if (nt->FileHeader.TimeDateStamp != kExeTimestamp) {
+    // test: <game>mp_fakeexe.txt = behave like an unknown game build (GOG / DRM-free)
+    bool fakeExe = GetFileAttributesW(L"bmp_fakeexe.txt") != INVALID_FILE_ATTRIBUTES;
+    if (nt->FileHeader.TimeDateStamp != kExeTimestamp || fakeExe) {
         Log("!! exe timestamp %#x != expected %#x - unknown game build, exe hooks disabled (multiplayer needs the "
             "current Steam build of Banished 1.0.7)", nt->FileHeader.TimeDateStamp, kExeTimestamp);
+        // tell the player once per start (GOG / DRM-free / other builds): otherwise nothing happens and the mod's
+        // main-menu notice even claims the DLL is missing
+        std::thread([] {
+            // wait for the game's window and attach the box to it - a box without owner opens behind the game
+            HWND owner = nullptr;
+            for (int i = 0; i < 60 && !owner; i++) {
+                Sleep(500);
+                EnumWindows([](HWND h, LPARAM l) -> BOOL {
+                    DWORD pid = 0;
+                    GetWindowThreadProcessId(h, &pid);
+                    if (pid != GetCurrentProcessId() || !IsWindowVisible(h) || GetWindow(h, GW_OWNER)) return TRUE;
+                    RECT r;
+                    if (!GetWindowRect(h, &r) || r.right - r.left < 640) return TRUE;  // not the launcher / a splash
+                    *(HWND*)l = h;
+                    return FALSE;
+                }, (LPARAM)&owner);
+            }
+            Sleep(3000);  // let the main menu appear first
+            MessageBoxW(owner,
+                L"Banished Multiplayer only works with the Steam version of Banished 1.0.7 for now.\n\n"
+                L"This copy of the game (GOG, DRM-free or another build) has a different program file, so the "
+                L"multiplayer stays switched off. The game itself runs normally.\n\n"
+                L"To remove the mod, delete dinput8.dll from the Banished folder.",
+                L"Banished Multiplayer", MB_OK | MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND);
+        }).detach();
         return;
     }
     towns::Install();  // fixed exe addresses: only on the known build
