@@ -27,6 +27,12 @@ $cl = "cl /nologo /LD /O2 /MT /EHsc /std:c++17 /W3 /Zi /I`"$root\third_party\min
 cmd /c "`"$vcvars`" >nul && $cl"
 if ($LASTEXITCODE) { throw "build failed ($LASTEXITCODE)" }
 
+# the relay server for Windows (server\relay\BanishedRelay.cpp, a port of tools\bmp_relay.py)
+$clRelay = "cl /nologo /O2 /MT /EHsc /std:c++17 /W3 /Fo`"$root\build\\`" /Fe`"$root\build\BanishedRelay.exe`" " +
+           "`"$root\server\relay\BanishedRelay.cpp`" /link ws2_32.lib iphlpapi.lib winhttp.lib"
+cmd /c "`"$vcvars`" >nul && $clRelay"
+if ($LASTEXITCODE) { throw "relay build failed ($LASTEXITCODE)" }
+
 if ($Deploy) {
     $game = Get-BanishedDir
     Copy-Item "$root\build\dinput8.dll" "$game\dinput8.dll" -Force

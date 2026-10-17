@@ -54,7 +54,7 @@ Main menu → **Multiplayer**:
 | | How | Needs |
 |---|---|---|
 | **Steam** | The host clicks **Invite players**; the others accept, or right-click the host in their Steam friends list → **Join Game** | Everyone on Steam. Traffic goes through Valve's relays, so nobody's IP address is shared |
-| **Relay server** | The host gets a **room code** (copy button next to it) and sends it to the others; they paste it under **Join a game** | Everybody enters the same **Relay address**: a relay server somebody runs ([how to run one](docs/RELAY.md)) |
+| **Relay server** | The host gets a **room code** (copy button next to it) and sends it to the others; they paste it under **Join a game** | Everybody enters the same **Relay address**: a relay server somebody in your group runs - double-click `BanishedRelay.exe` from the release zip ([details](docs/RELAY.md)) |
 | **Direct (IP)** | The others type the host's public IP address and port | The host forwards the port (default 7777, TCP) on their router. Players see each other's IP address |
 
 In the game, the multiplayer bar at the top of the screen shows the players and has:

@@ -31,6 +31,9 @@ $dir = "$out\$name"
 if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
 New-Item -ItemType Directory -Force $dir | Out-Null
 Copy-Item $dll.FullName, $pkm.FullName $dir
+$relay = Get-Item "$root\build\BanishedRelay.exe"  # a relay server anyone can run (README: "Running your own relay")
+if ($relay.LastWriteTime -lt (Get-Item "$root\server\relay\BanishedRelay.cpp").LastWriteTime) { throw 'build\BanishedRelay.exe is older than its source - run build.ps1' }
+Copy-Item $relay.FullName $dir
 Copy-Item "$root\release_files\Install.bat", "$root\release_files\Uninstall.bat", "$root\release_files\install.ps1" $dir
 $repo = (Get-Content "$root\repo.txt" -TotalCount 1).Trim()
 (Get-Content "$root\release_files\README.txt" -Raw).Replace('{VERSION}', $version).Replace('{REPO}', "https://github.com/$repo") |

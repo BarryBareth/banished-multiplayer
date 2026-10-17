@@ -14,13 +14,27 @@ publishes your home IP address to everyone who uses it; use a VPS if you don't w
 
 ## What you need
 
-- A machine with **Python 3.8 or newer** that players can reach from the internet: a VPS, or a PC/server at home with
-  a port forward.
+- A machine that players can reach from the internet: a Windows PC or a server at home with a port forward, or a VPS.
 - **TCP port 7780** open (or any port you choose).
 
-The relay is one file with no dependencies: [`tools/bmp_relay.py`](../tools/bmp_relay.py).
+Two versions with the same protocol and limits:
+- **Windows:** `BanishedRelay.exe`, in every release zip (source: [`server/relay/BanishedRelay.cpp`](../server/relay/BanishedRelay.cpp)).
+  No installation.
+- **Any OS with Python 3.8+:** [`tools/bmp_relay.py`](../tools/bmp_relay.py), one file, no dependencies, plus a
+  systemd installer for Linux.
 
-## Quick start (any OS)
+## Windows
+
+1. Double-click `BanishedRelay.exe`. The window shows the address to give the other players: your public address
+   (looked up once from api.ipify.org; `--no-lookup` skips that) and this PC's address on your network.
+2. Forward **TCP 7780** on your router to this PC's network address, and click **Allow** when Windows Firewall asks.
+3. Everybody enters `<public address>:7780` under **Relay address** in the Multiplayer window and chooses
+   **Relay server**. Players on the same network as the relay can use the network address instead.
+
+Leave the window open while playing; closing it (or Ctrl+C) stops the relay. Options:
+`BanishedRelay.exe --port 7780 --bind 0.0.0.0 --max-rooms 500 --per-ip 12 --no-lookup`.
+
+## Quick start with Python (any OS)
 
 ```
 python3 -I tools/bmp_relay.py --port 7780

@@ -42,10 +42,26 @@ Connect through:
   Steam           easiest. Host, then "Invite players" (Steam overlay), or the others right-click
                   you in their Steam friends list -> Join Game.
   Relay server    the host gets a room code: copy it, send it to the other players, they paste it
-                  under "Join a game". No router setup needed. Everybody enters the same relay
-                  server under "Relay address" - one somebody runs (how: {REPO}, docs/RELAY.md).
+                  under "Join a game". Everybody enters the same relay server under "Relay
+                  address" - one somebody in your group runs (see RUNNING YOUR OWN RELAY below).
   Direct (IP)     the others type the host's IP address. The host's router must forward the port
                   (default 7777).
+
+
+RUNNING YOUR OWN RELAY
+----------------------
+A relay helps when the host can't forward a port: everybody connects to the relay instead of to
+the host. One person in your group - with a PC whose router they can set up, or a server - runs it:
+
+1. Double-click BanishedRelay.exe (in this zip). It shows the address to give the others, e.g.
+   203.0.113.5:7780. Leave the window open while you play; closing it stops the relay.
+2. On that PC's router, forward TCP port 7780 to the PC ("on this network" address in the
+   window), and click Allow when Windows Firewall asks.
+3. Everybody (the relay's owner too) enters that address under "Relay address", chooses
+   "Relay server", and the host hosts as usual.
+
+Everyone who connects sees the relay PC's IP address. On a Linux server or VPS, use the Python
+version and installer from the project page instead (docs/RELAY.md).
 
 In the game the multiplayer bar (top of the screen) shows the players and has Trade, Invite,
 Resync, Leave and the bug button.
