@@ -357,8 +357,9 @@ PackageFile bmpShare
 {
 	String _name = "Banished Multiplayer";
 	String _author = "Banished Multiplayer";
-	String _description = "Companion data mod for the Banished Multiplayer DLL: adds a Share button to storage barns,
-		stockpiles and storage carts so another player's town can use them. Has no effect without the DLL.";
+	String _description = "Play Banished together with other players: one shared town, or separate towns on one map.
+		This file holds the mod's windows and buttons. The multiplayer itself is a program file (dinput8.dll): get it
+		from github.com/BarryBareth/banished-multiplayer - without it this mod does nothing.";
 	String _icon = "icon.png";
 	String _preview = "preview.jpg";
 	int _userVersion = 1;
