@@ -30,7 +30,7 @@ game that's already running.
    - `bmpShare.pkm` → `Banished\WinData`
 3. Start Banished from Steam. The main menu now has a **Multiplayer** button.
 
-If you subscribed to the mod on the **Steam Workshop**, Steam already gives you `bmpShare.pkm`. You still need the
+If you subscribed to the mod on the [**Steam Workshop**](https://steamcommunity.com/sharedfiles/filedetails/?id=3821186063), Steam already gives you `bmpShare.pkm`. You still need the
 DLL from the zip above; Install.bat notices the Workshop copy and only installs the DLL.
 
 Windows or your antivirus may warn about Install.bat or the DLL because they're new and unsigned. Hooking into a
