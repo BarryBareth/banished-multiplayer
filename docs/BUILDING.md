@@ -38,6 +38,11 @@ BANISHED_KIT=D:\BanishedKit
 .\build.ps1 -Deploy    # and copy it into the Banished folder
 ```
 
+Players must all run the **same DLL file**: the version check compares a hash of the DLL's code, and a DLL you build
+yourself (another compiler version, another checkout, even other line endings) almost never matches the official
+release byte for byte. To play with people on the release, use the release's DLL; to test your own build, give the
+other players your DLL.
+
 `build.ps1` also writes `src\repo_gen.h` from `repo.txt` (`owner/name` of the GitHub repository: the update check
 and the "get the DLL" texts point there). Forks: change `repo.txt`.
 
