@@ -23,14 +23,15 @@ game that's already running.
 ## Install
 
 1. Download the newest `BanishedMultiplayer-<version>.zip` from the
-   [Releases page](../../releases/latest).
+   [Releases page](../../releases/latest) (also on [Nexus Mods](https://www.nexusmods.com/banished/mods/149)).
 2. Close Banished. Unpack the zip anywhere and double-click **Install.bat**. It finds Banished by itself (or asks
    where it is) and copies two files:
    - `dinput8.dll` → the Banished folder (next to `Application-steam-x64.exe`)
    - `bmpShare.pkm` → `Banished\WinData`
 3. Start Banished from Steam. The main menu now has a **Multiplayer** button.
 
-If you subscribed to the mod on the [**Steam Workshop**](https://steamcommunity.com/sharedfiles/filedetails/?id=3821186063), Steam already gives you `bmpShare.pkm`. You still need the
+If you subscribed to the mod on the [**Steam Workshop**](https://steamcommunity.com/sharedfiles/filedetails/?id=3821186063) or got
+`bmpShare.pkm` from [banishedinfo.com](https://banishedinfo.com/mods/view/538-Banished-Multiplayer), you already have the mod file. You still need the
 DLL from the zip above; Install.bat notices the Workshop copy and only installs the DLL.
 
 Windows or your antivirus may warn about Install.bat or the DLL because they're new and unsigned. Hooking into a
