@@ -110,7 +110,9 @@ class Handler(BaseHTTPRequestHandler):
         build = self.headers.get('X-BMP-Build', '?')[:40]
         print(f'{rid} {kind} build {build} {n // 1024} KB files {len(names)}', flush=True)
         # only the report's type, number and build go out (ntfy.sh is a public server): no player text
-        notify(f'{"Crash" if kind == "crash" else "Bug"} report {rid} - build {build}, {n // 1024} KB')
+        # in the background: ntfy.sh can take seconds, and the player's game waits for this reply
+        threading.Thread(target=notify, args=(f'{"Crash" if kind == "crash" else "Bug"} report {rid} - build {build}, {n // 1024} KB',),
+                         daemon=True).start()
         self.reply(200, {'id': rid})
 
     def log_message(self, fmt, *a):
