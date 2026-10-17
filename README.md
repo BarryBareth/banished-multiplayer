@@ -57,6 +57,22 @@ Main menu → **Multiplayer**:
 | **Relay server** | The host gets a **room code** (copy button next to it) and sends it to the others; they paste it under **Join a game** | Everybody enters the same **Relay address**: a relay server somebody in your group runs - double-click `BanishedRelay.exe` from the release zip ([details](docs/RELAY.md)) |
 | **Direct (IP)** | The others type the host's public IP address and port | The host forwards the port (default 7777, TCP) on their router. Players see each other's IP address |
 
+## Running your own relay
+
+A relay helps when the host can't forward a port: everybody connects to the relay instead of to the host. One person
+in your group runs it:
+
+1. Double-click **`BanishedRelay.exe`** (in the release zip). Its window shows the address to give the others, e.g.
+   `203.0.113.5:7780`. Leave it open while you play.
+2. On that PC's router, forward **TCP port 7780** to the PC (the "on this network" address in the window), and click
+   **Allow** when Windows Firewall asks.
+3. Everybody enters that address under **Relay address**, chooses **Relay server**, and the host hosts as usual.
+
+Everyone who connects sees the relay PC's IP address. For a Linux server or VPS there's a Python version with an
+installer: see [docs/RELAY.md](docs/RELAY.md).
+
+## In the game
+
 In the game, the multiplayer bar at the top of the screen shows the players and has:
 
 - **Trade** (separate towns): offer goods to another player, once or every season/year.
