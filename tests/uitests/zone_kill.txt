@@ -1,0 +1,9 @@
+# Zone removal through the ZoneShutdown hook (2026-10-15): build a field, an orchard and a pasture in town 1 (host),
+# destroy them - no crash, no "!! towns: zone" line (the normal case is listed in its own town).
+100 build Template\CropField.rsc near 205 225 6 6
+110 build Template\Orchard.rsc near 205 225 6 6
+120 build Template\Pasture.rsc near 205 225 7 7
+3000 kill @CropField
+3100 kill @Orchard
+3200 kill @Pasture
+3400 towns

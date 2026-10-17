@@ -1,0 +1,6 @@
+# place one of each kind at free spots near town 1 (start 205,225 on the -NoPick test map)
+100 build Template\GathererShelter.rsc near 205 225
+105 build Template\TownHall.rsc near 205 225
+110 build Template\CropField.rsc near 205 225 6 6
+115 build Template\Orchard.rsc near 205 225 6 6
+120 build Template\Pasture.rsc near 205 225 6 6

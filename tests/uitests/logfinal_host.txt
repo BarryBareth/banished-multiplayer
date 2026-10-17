@@ -1,0 +1,3 @@
+50 cmd win 10 0 0 5 1 - 0
+3300 openui Template\UtilityEventLog.rsc
+3400 screenshot log_final

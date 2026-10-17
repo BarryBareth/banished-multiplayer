@@ -1,0 +1,5 @@
+50 cmd win 10 0 0 5 1 - 0
+105 build Template\TownHall.rsc near 205 225
+8400 open @TownHall
+8410 number TownHallUI 0x40 0x40 1 0x10 6
+8420 press TownHallUI 0x15 0x1967

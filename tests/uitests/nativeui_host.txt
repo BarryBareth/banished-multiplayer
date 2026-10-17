@@ -1,0 +1,12 @@
+# host: workplace window with the Share check, then the event log with Mine / Everyone
+50 cmd win 10 0 0 5 1 - 0
+100 build Template\GathererShelter.rsc near 205 225
+9000 open @GathererShelter
+9060 screenshot work_off
+9100 sharework @GathererShelter 1 1
+9200 screenshot work_on
+9300 close
+9400 openui Template\UtilityEventLog.rsc
+9460 screenshot log_all
+9500 press EventLogUI any 0x12 0x300
+9560 screenshot log_mine

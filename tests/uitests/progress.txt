@@ -1,0 +1,22 @@
+# build everything near town 1, watch the gatherer's shelter until it is finished
+50 cmd win 10 0 0 5 1 - 0
+100 build Template\GathererShelter.rsc near 205 225
+105 build Template\TownHall.rsc near 205 225
+110 build Template\CropField.rsc near 205 225 6 6
+115 build Template\Orchard.rsc near 205 225 6 6
+120 build Template\Pasture.rsc near 205 225 7 7
+2000 open @GathererShelter
+2010 state
+4000 open @GathererShelter
+4010 state
+6000 open @CropField
+6010 state
+6020 open @Orchard
+6030 state
+6040 open @Pasture
+6050 state
+8000 open @GathererShelter
+8010 state
+8020 open @TownHall
+8030 state
+8040 windows

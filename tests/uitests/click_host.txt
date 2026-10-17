@@ -1,0 +1,11 @@
+# host: real mouse clicks on the game-styled windows (positions from rs_after.png, 2048x1081 client)
+50 cmd win 10 0 0 5 1 - 0
+500 tradewin
+800 mouse 1040 308 move
+805 mouse 1040 308 down
+810 mouse 1040 308 up
+815 mouse 1093 18 move
+820 mouse 1093 18 down
+825 mouse 1093 18 up
+830 mouse off
+900 screenshot click_after

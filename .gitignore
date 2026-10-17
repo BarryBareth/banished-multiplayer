@@ -1,0 +1,25 @@
+# build output
+build/
+release/
+src/repo_gen.h
+*.pdb
+*.obj
+
+# generated from the Banished Mod Kit (contains copies of the game's files - never commit)
+mod/work/
+mod/src/
+mod/bin/
+mod/*.pkm
+mod/*.log
+mod/*.err
+mod/builderror.png
+
+# your PC
+local-paths.txt
+
+# test output and reverse-engineering material (never commit decompiled game code)
+recon/
+ghidra/
+tests/uitests/shots/
+__pycache__/
+*.dmp

@@ -1,0 +1,5 @@
+# Bug report window (2026-10-15): open it in game, Send (to the test receiver from bmp_settings.txt bugurl=), then
+# Save to Desktop. tools: python -I tools/bmp_bugs.py --port 8781 --dir <scratch>
+1000 report open
+1200 report send Testing the report: built a field, Ann and Bob were trading, then it froze
+2500 report save Saved copy of the same test

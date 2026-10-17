@@ -1,0 +1,2 @@
+# host: standing trade - town 1 gives 10 wood, town 0 gives 10 stone, every season
+600 cmd win 26 0 1 10 10 Template\RawMaterialWood.rsc:resource|Template\RawMaterialStone.rsc:resource|1 0

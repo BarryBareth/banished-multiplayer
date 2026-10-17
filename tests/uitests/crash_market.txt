@@ -1,0 +1,8 @@
+# market crash repro (save CrashTestA = user's Auto.sav 2026-10-14 20:45): add vendors to town 0's market
+300 open 266 261
+320 press WorkPlaceUI 0x12 0x1450
+340 press WorkPlaceUI 0x12 0x1450
+360 press WorkPlaceUI 0x12 0x1450
+380 press WorkPlaceUI 0x12 0x1450
+400 press WorkPlaceUI 0x12 0x1450
+420 state

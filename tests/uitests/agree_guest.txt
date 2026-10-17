@@ -1,0 +1,4 @@
+# guest: settle near the host; later cancel standing trade 1 (session ticks restart after the resync at 30000)
+100 cmd win 16 0 0 130 160 - 0
+0 nextsession
+90000 cmd win 27 0 0 1 0 - 0

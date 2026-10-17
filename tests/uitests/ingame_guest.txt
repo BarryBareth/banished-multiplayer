@@ -1,0 +1,4 @@
+# guest: settle panel before settling, then an offer to the host
+150 screenshot ig_settle
+300 cmd win 16 0 0 130 160 - 0
+1200 offer 0 10 Template\RawMaterialWood.rsc:resource 10 Template\RawMaterialStone.rsc:resource 1

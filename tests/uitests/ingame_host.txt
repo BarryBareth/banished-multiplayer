@@ -1,0 +1,7 @@
+# host: the in-game windows in the game's style (bar, trade window, an offer from the guest)
+50 cmd win 10 0 0 5 1 - 0
+400 screenshot ig_bar
+500 tradewin
+600 screenshot ig_trade
+700 tradewin
+1500 screenshot ig_offer

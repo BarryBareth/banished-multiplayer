@@ -1,0 +1,2 @@
+# guest loads a save from inside the running game
+2000 loadgame Save0

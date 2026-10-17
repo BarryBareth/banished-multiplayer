@@ -1,0 +1,26 @@
+[Unit]
+Description=Banished Multiplayer relay (tools/bmp_relay.py)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/python3 -I /opt/bmp-relay/bmp_relay.py --port 7780
+Restart=always
+RestartSec=3
+# runs as a throwaway unprivileged user with a read-only view of the system
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+MemoryMax=300M
+TasksMax=64
+LimitNOFILE=8192
+
+[Install]
+WantedBy=multi-user.target

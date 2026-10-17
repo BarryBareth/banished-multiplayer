@@ -1,0 +1,10 @@
+# host: real click on the workplace window's Share icon (title bar), then the log must show the share command ran
+50 cmd win 10 0 0 5 1 - 0
+100 build Template\GathererShelter.rsc near 205 225
+9000 open @GathererShelter
+9030 screenshot wclick_before
+9040 mouse 433 149 move
+9080 mouse 433 149 down
+9100 mouse 433 149 up
+9120 mouse off
+9150 screenshot wclick_after

@@ -1,0 +1,10 @@
+# shared storage: a new stockpile joins the shared list, then is destroyed at once (must leave every list, no crash)
+100 build Template\StorageYard.rsc near 205 225 5 5
+900 towns
+1000 cmd win 24 0 0 1 1 - 0
+1300 towns
+1400 kill @StorageYard
+1500 towns
+1600 kill 202 230
+1700 towns
+3000 towns

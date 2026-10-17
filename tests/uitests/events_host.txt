@@ -1,0 +1,8 @@
+# host: event log towns (dumped before and after a resync), a workplace window open (overlay panel scan)
+50 cmd win 10 0 0 5 1 - 0
+100 build Template\GathererShelter.rsc near 205 225
+3000 open @GathererShelter
+3100 close
+3400 events 15
+0 nextsession
+2000 events 15

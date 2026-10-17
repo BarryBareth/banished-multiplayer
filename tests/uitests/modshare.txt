@@ -1,0 +1,5 @@
+# press the mod's Share checkbox in the barn window (ControlUI button 50000), check both towns, keep the window open
+200 open 202 230
+260 towns
+300 press ControlUI 0x12 50000
+600 towns

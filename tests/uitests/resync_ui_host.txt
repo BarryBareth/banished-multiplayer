@@ -1,0 +1,6 @@
+# host: native windows across a resync (session reload destroys the game UI): the trade window comes back
+50 cmd win 10 0 0 5 1 - 0
+500 tradewin
+800 screenshot rs_before
+0 nextsession
+400 screenshot rs_after

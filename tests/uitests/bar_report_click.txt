@@ -1,0 +1,11 @@
+# Scripted mouse clicks on the in-game bar (2026-10-15): the report (disaster icon) button first (layout unchanged),
+# then Players (known to work). Positions from shots/bar.png (2048x1081 client).
+400 mouse 1275 18 move
+420 mouse 1275 18 down
+440 mouse 1275 18 up
+460 mouse off
+480 screenshot report_open
+500 mouse 1075 18 move
+520 mouse 1075 18 down
+540 mouse 1075 18 up
+560 mouse off

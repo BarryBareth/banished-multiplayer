@@ -1,0 +1,24 @@
+# host: gatherer hut shared with town 2 (long run: where does the food go?)
+50 cmd win 10 0 0 5 1 - 0
+100 build Template\GathererShelter.rsc near 205 225
+8000 sharework @GathererShelter 1 1
+9000 open @GathererShelter
+9010 state
+9020 close
+9030 towns
+15000 open @GathererShelter
+15010 state
+15020 close
+15030 towns
+21000 open @GathererShelter
+21010 state
+21020 close
+21030 towns
+27000 open @GathererShelter
+27010 state
+27020 close
+27030 towns
+33000 open @GathererShelter
+33010 state
+33020 close
+33030 towns

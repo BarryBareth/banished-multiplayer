@@ -1,0 +1,17 @@
+# Bug report window by real (scripted engine-level) clicks (2026-10-15): bar disaster button -> window, Send (to the
+# test receiver in bmp_settings.txt bugurl=), Save to Desktop, Close. Positions from shots/report_open.png (2048x1081).
+400 mouse 1275 18 move
+420 mouse 1275 18 down
+440 mouse 1275 18 up
+500 mouse 1165 615 move
+520 mouse 1165 615 down
+540 mouse 1165 615 up
+900 screenshot report_sent
+950 mouse 1043 615 move
+970 mouse 1043 615 down
+990 mouse 1043 615 up
+1300 mouse 1283 615 move
+1320 mouse 1283 615 down
+1340 mouse 1283 615 up
+1360 mouse off
+1400 screenshot report_closed

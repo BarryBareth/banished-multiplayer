@@ -1,0 +1,8 @@
+# shared storage per building: share only the barn at 202,230 with town 2; resync; destroy it
+900 towns
+1000 share 202 230 1 1
+1300 towns
+0 nextsession
+600 towns
+800 kill 202 230
+1000 towns

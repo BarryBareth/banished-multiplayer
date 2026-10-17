@@ -1,0 +1,3 @@
+50 cmd win 10 0 0 5 1 - 0
+100 build Template\GathererShelter.rsc valid 205 225
+110 build Template\TradingPost.rsc valid 215 220

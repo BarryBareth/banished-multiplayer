@@ -1,0 +1,26 @@
+# host: gatherer hut shared with town 2, then unshared
+50 cmd win 10 0 0 5 1 - 0
+100 build Template\GathererShelter.rsc near 205 225
+7000 open @GathererShelter
+7010 state
+7020 close
+8000 sharework @GathererShelter 1 1
+8400 open @GathererShelter
+8410 state
+8420 close
+8600 towns
+9500 open @GathererShelter
+9510 state
+9520 close
+10000 towns
+11000 open @GathererShelter
+11010 state
+11020 close
+11900 towns
+20000 open @GathererShelter
+20010 state
+20020 close
+24000 sharework @GathererShelter 1 0
+25000 open @GathererShelter
+25010 state
+25020 close

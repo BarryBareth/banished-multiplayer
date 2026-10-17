@@ -1,0 +1,2 @@
+# where is the bar (report button position)
+400 screenshot bar

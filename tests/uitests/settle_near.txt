@@ -1,0 +1,2 @@
+# guest: settle near the host (connected by land)
+100 cmd win 16 0 0 130 160 - 0

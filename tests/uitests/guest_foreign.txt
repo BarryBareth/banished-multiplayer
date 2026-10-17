@@ -1,0 +1,19 @@
+# Guest (town 2): tries the same controls on the HOST's buildings - every one must be refused.
+9000 open 204 224
+9010 press WorkPlaceUI 0x12 0x1452
+9020 press WorkPlaceUI 0x12 0x1450
+9030 close
+9100 open 193 236
+9110 pick CropUI Template\NaturalResourcePotato.rsc:resource
+9120 close
+9200 open 259 240
+9210 number TownHallUI 0x40 0x40 1 0x10 9 ; press TownHallUI 0x15 0x1967
+9230 close
+16500 open 217 215
+16510 spin TradeUI 0x90 0x20 0 0x18 99 ; press TradeUI 0x15 7000
+16520 press TradeUI 0x12 5001
+16530 close
+# the host's town hall must show the HOST's numbers (read-only view of the owner town)
+17150 open 259 240
+17250 rows TownHallUI 0x40 0x40 12
+17260 close

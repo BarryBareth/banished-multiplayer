@@ -1,0 +1,6 @@
+# host: native windows open the whole time (soak): trade window + event log
+50 cmd win 10 0 0 5 1 - 0
+300 tradewin
+400 openui Template\UtilityEventLog.rsc
+0 nextsession
+300 tradewin

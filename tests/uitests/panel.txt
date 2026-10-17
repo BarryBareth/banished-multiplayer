@@ -1,0 +1,2 @@
+# keep a barn window open (overlay share panel check)
+300 open 202 230

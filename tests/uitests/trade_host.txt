@@ -1,0 +1,2 @@
+# host: trade (town 1 gives 20 wood, town 0 gives 20 stone)
+600 cmd win 17 0 1 20 20 Template\RawMaterialWood.rsc:resource|Template\RawMaterialStone.rsc:resource 0

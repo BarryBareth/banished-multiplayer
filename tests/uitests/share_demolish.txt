@@ -1,0 +1,10 @@
+# shared storage: demolish a shared barn while shared
+900 towns
+1000 cmd win 24 0 0 1 1 - 0
+1300 towns
+1400 open 202 230
+1410 press DestroyUI 0x12 0x1771
+1420 close
+6000 towns
+9000 towns
+12000 towns

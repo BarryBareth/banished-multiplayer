@@ -1,0 +1,27 @@
+#pragma once
+#include <windows.h>
+#include <cstdint>
+#include <cstdio>
+
+// Several game instances can run from the same folder (local multiplayer testing): each claims a slot at
+// startup (named mutex) and suffixes its files with SlotSuffix() ("" for slot 0, "_p1" for slot 1, ...).
+extern int g_slot;
+void SlotClaim();
+const wchar_t* SlotSuffix();
+
+// Logging to <game dir>\bmp<suffix>.log (flushed per line so crashes keep the tail).
+void LogInit();
+void Log(const char* fmt, ...);
+
+// Resolve an export from Runtime-steam-x64.dll by mangled name; logs and returns nullptr if missing.
+void* RuntimeExport(const char* mangled);
+
+// Install all hooks. Called once, on the game's main thread.
+void InstallHooks();
+
+// The companion data mod (WinData\bmpShare.pkm) as this player has it: kModOk = installed and the build this DLL
+// expects, kModMissing = not installed, kModOther = another build of it (older or newer copy). Main thread, once the
+// game has started (before that: kModOk).
+enum { kModOk, kModMissing, kModOther };
+int CompanionMod();
+int CompanionModKnown();  // the last answer of CompanionMod(), any thread (overlay::GameFrame asks every frame)

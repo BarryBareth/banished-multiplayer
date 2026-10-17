@@ -1,0 +1,9 @@
+# host: real click on the event log's "Mine" check
+50 cmd win 10 0 0 5 1 - 0
+400 openui Template\UtilityEventLog.rsc
+430 screenshot logclick_before
+440 mouse 70 172 move
+460 mouse 70 172 down
+480 mouse 70 172 up
+500 mouse off
+560 screenshot logclick_after

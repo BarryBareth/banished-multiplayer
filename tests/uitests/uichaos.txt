@@ -1,0 +1,2 @@
+100 camtour 50
+100 browse 4

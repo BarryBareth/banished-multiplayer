@@ -1,0 +1,6 @@
+# drift hunt: town 1 shares its barn and stockpile with town 2, demolishes the barn, long run
+1000 share 202 230 1 1
+1010 share 208 231 1 1
+1400 open 202 230
+1410 press DestroyUI 0x12 0x1771
+1420 close

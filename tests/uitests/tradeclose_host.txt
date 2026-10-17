@@ -1,0 +1,9 @@
+# host: real mouse click on the trade window's title-bar X (2048x1081 client)
+50 cmd win 10 0 0 5 1 - 0
+500 tradewin
+700 screenshot tradeclose_before
+800 mouse 1272 160 move
+805 mouse 1272 160 down
+810 mouse 1272 160 up
+815 mouse off
+900 screenshot tradeclose_after

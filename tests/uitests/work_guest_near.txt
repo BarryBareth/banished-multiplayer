@@ -1,0 +1,12 @@
+# guest: settle near the host (connected), then one more of every profession
+100 cmd win 16 0 0 130 160 - 0
+8540 cmd win 10 0 0 2 2 - 0
+8560 cmd win 10 0 0 2 3 - 0
+8580 cmd win 10 0 0 2 4 - 0
+8600 cmd win 10 0 0 2 5 - 0
+8620 cmd win 10 0 0 2 6 - 0
+8640 cmd win 10 0 0 2 7 - 0
+8660 cmd win 10 0 0 2 8 - 0
+8680 cmd win 10 0 0 2 9 - 0
+8700 cmd win 10 0 0 2 10 - 0
+8720 cmd win 10 0 0 2 11 - 0

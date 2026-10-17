@@ -1,0 +1,80 @@
+# UI test suite, host side (town 1): build one of each, then use every window control and check the simulation.
+# Run with tools\uitest.ps1 (the guest side is guest_foreign.txt). -NoPick test map: town 1 starts at 205,225.
+50 cmd win 10 0 0 5 1 - 0
+100 build Template\GathererShelter.rsc near 205 225
+105 build Template\TownHall.rsc near 205 225
+110 build Template\CropField.rsc near 205 225 6 6
+115 build Template\Orchard.rsc near 205 225 6 6
+120 build Template\Pasture.rsc near 205 225 7 7
+# workplace: max-worker arrows (fix 2026-10-11) and + worker (fix 2026-10-11)
+# The shelter finishes at a different tick each run (builder order follows command latency) and the labor manager
+# staffs it on its own: wait until it is a workplace, then set a known baseline (- removes a worker at once, + assigns
+# a free one at once: 0 workers, limit at its max 4) and check right after the presses.
+7990 waitfor @GathererShelter 3000 workers
+8000 open @GathererShelter
+8002 press WorkPlaceUI 0x12 0x1451
+8004 press WorkPlaceUI 0x12 0x1451
+8006 press WorkPlaceUI 0x12 0x1451
+8008 press WorkPlaceUI 0x12 0x1451
+8010 press WorkPlaceUI 0x12 0x1451
+8012 press WorkPlaceUI 0x12 0x1452
+8014 press WorkPlaceUI 0x12 0x1452
+8016 press WorkPlaceUI 0x12 0x1452
+8018 press WorkPlaceUI 0x12 0x1452
+8100 state
+8105 expect workers 0 limit 4 |
+8120 press WorkPlaceUI 0x12 0x1453
+8140 press WorkPlaceUI 0x12 0x1453
+8160 press WorkPlaceUI 0x12 0x1452
+8180 press WorkPlaceUI 0x12 0x1450
+8300 state
+8305 expect workers 1 limit 3 |
+8210 close
+# crop field / orchard tree / pasture animal + animal limit slider (orchard, pasture type: fix 2026-10-11)
+8300 open @CropField
+8310 pick CropUI Template\NaturalResourceCorn.rsc:resource
+8320 close
+8330 open @Orchard
+8340 pick OrchardUI Template\NaturalResourcePeachTree.rsc:resource
+8350 close
+8360 open @Pasture
+8370 pick PastureUI Template\LivestockCow.rsc:resource
+8375 setf PastureUI 0x38 0x128 5 ; press PastureUI 0x17 0x1f5
+8380 close
+# town hall professions: builders +1 (number + press in the same frame, as a click)
+8400 open @TownHall
+8410 number TownHallUI 0x40 0x40 1 0x10 +1 ; press TownHallUI 0x15 0x1967
+8430 close
+# the trading post last (it would take the builders from the buildings above)
+8600 build Template\TradingPost.rsc valid 215 220
+# trading post: merchant setting combo, two order amounts, move row 1 up (fix 2026-10-11)
+16000 open @TradingPost
+16010 combo TradeUI 0x138 2 ; press TradeUI 0x14 0x4e22
+16020 spin TradeUI 0x90 0x20 0 0x18 25 ; press TradeUI 0x15 7000
+16030 spin TradeUI 0x90 0x20 1 0x18 7 ; press TradeUI 0x15 7001
+16040 press TradeUI 0x12 5001
+16050 close
+# results, after the guest's refused attempts (guest_foreign.txt)
+17000 open @GathererShelter
+17010 state
+17015 expect limit 3 |
+17020 open @CropField
+17030 state
+17035 expect crop Template\NaturalResourceCorn.rsc:resource
+17040 open @Orchard
+17050 state
+17055 expect tree Template\NaturalResourcePeachTree.rsc:resource
+17060 open @Pasture
+17070 state
+17075 expect animal Template\LivestockCow.rsc:resource limit 5
+17080 open @TradingPost
+17090 state
+17095 expect trade28 2 trade2c -1 orders 7 25
+17100 close
+# town hall view: the guest opens this town hall (guest_foreign.txt) - both must show this town's numbers
+17150 open @TownHall
+17250 rows TownHallUI 0x40 0x40 12
+17260 close
+# shared storage (2026-10-12): town 2 must see this town's storages
+17300 share 202 230 1 1
+17400 towns

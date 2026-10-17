@@ -1,0 +1,24 @@
+[Unit]
+Description=Banished Multiplayer bug report receiver (tools/bmp_bugs.py)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# reports in /var/lib/bmp-bugs/reports, release downloads (optional) in /var/lib/bmp-bugs/public
+ExecStart=/usr/bin/python3 -I /opt/bmp-bugs/bmp_bugs.py --port 8781 --dir /var/lib/bmp-bugs/reports --public /var/lib/bmp-bugs/public
+# optional: BMP_BUGS_NTFY=https://ntfy.sh/<your secret topic> for a phone notification per report
+EnvironmentFile=-/etc/bmp-bugs.env
+Restart=always
+RestartSec=3
+DynamicUser=yes
+StateDirectory=bmp-bugs
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+MemoryMax=300M
+
+[Install]
+WantedBy=multi-user.target

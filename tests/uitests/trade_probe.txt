@@ -1,0 +1,8 @@
+50 cmd win 10 0 0 8 1 - 0
+110 build Template\TradingPost.rsc valid 215 220
+6000 open @TradingPost
+6010 state
+6020 windows
+11000 open @TradingPost
+11010 state
+11020 windows

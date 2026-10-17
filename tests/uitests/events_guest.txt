@@ -1,0 +1,5 @@
+# guest: settles near, then the event log
+100 cmd win 16 0 0 130 160 - 0
+3400 events 15
+0 nextsession
+2000 events 15

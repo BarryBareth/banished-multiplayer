@@ -1,0 +1,2 @@
+# host loads a save from inside the running separate-towns game (like the game's Load menu)
+2000 loadgame MPTowns

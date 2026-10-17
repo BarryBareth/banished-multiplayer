@@ -1,0 +1,4 @@
+# trade goods that sit in markets (Friends.sav: town 0's market has ~577 venison) + storage theft watch
+300 storages
+600 cmd win 17 0 1 300 0 Template\RawMaterialVenison.rsc:resource|- 0
+1500 storages

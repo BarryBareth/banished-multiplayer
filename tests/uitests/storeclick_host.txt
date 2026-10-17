@@ -1,0 +1,6 @@
+300 open 210 234
+330 mouse 510 157 move
+350 mouse 510 157 down
+370 mouse 510 157 up
+390 mouse off
+420 screenshot store_after

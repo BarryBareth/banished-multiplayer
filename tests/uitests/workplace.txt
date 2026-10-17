@@ -1,0 +1,13 @@
+# 5 builders, one of each building near town 1, then open the gatherer's shelter and use its max-worker arrows
+50 cmd win 10 0 0 5 1 - 0
+100 build Template\GathererShelter.rsc near 205 225
+105 build Template\TownHall.rsc near 205 225
+110 build Template\CropField.rsc near 205 225 6 6
+115 build Template\Orchard.rsc near 205 225 6 6
+120 build Template\Pasture.rsc near 205 225 7 7
+11000 windows
+11010 open @GathererShelter
+11300 windows
+11310 press WorkPlaceUI 0x12 0x1453
+11600 press WorkPlaceUI 0x12 0x1453
+11900 press WorkPlaceUI 0x12 0x1450

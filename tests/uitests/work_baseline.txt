@@ -1,0 +1,25 @@
+# baseline: host staffs its own gatherer hut (4 workers), no sharing
+50 cmd win 10 0 0 5 1 - 0
+100 build Template\GathererShelter.rsc near 205 225
+7000 open @GathererShelter
+7010 press WorkPlaceUI 0x12 0x1450
+7020 press WorkPlaceUI 0x12 0x1450
+7030 press WorkPlaceUI 0x12 0x1450
+7040 press WorkPlaceUI 0x12 0x1450
+7050 close
+9000 open @GathererShelter
+9010 state
+9020 close
+9030 towns
+12000 open @GathererShelter
+12010 state
+12020 close
+12030 towns
+15000 open @GathererShelter
+15010 state
+15020 close
+15030 towns
+18000 open @GathererShelter
+18010 state
+18020 close
+18030 towns
