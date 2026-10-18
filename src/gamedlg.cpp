@@ -100,7 +100,7 @@ void Window::Check(const char* name, bool on) const { gameui::SetChecked(E(name)
 void Window::Enable(const char* name, bool on) const { gameui::Enable(E(name), on); }
 
 void* GameUi() {
-    uint8_t* gl = *(uint8_t**)((uintptr_t)GetModuleHandleW(nullptr) + 0x1cbdd8);
+    uint8_t* gl = *(uint8_t**)((uintptr_t)GetModuleHandleW(nullptr) + Rva(0x1cbdd8));
     return gl ? *(void**)(gl + 0x98) : nullptr;
 }
 

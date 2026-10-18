@@ -34,13 +34,29 @@ param(
     [switch]$InGameHost,  # no Python relay: slot 0 hosts in-process (TCP 7777) and sends its save to slot 1
     [switch]$ViaRelay,
     [string]$RelayAddr = '',  # -ViaRelay: use this relay server (host:port) instead of starting a local one    # -InGameHost through tools/bmp_relay.py (port 7780): host and guests connect out to it
-    [ValidateRange(2, 3)][int]$Players = 2   # -InGameHost: 3 = a third instance (slot 2, chaos) plays too
+    [ValidateRange(2, 3)][int]$Players = 2,   # -InGameHost: 3 = a third instance (slot 2, chaos) plays too
+    [string]$Gog0 = '',  # slot 0 (the host) runs the GOG build from this folder
+    [string]$Gog1 = '',  # slot 1 runs the GOG build from this folder (mixed Steam + GOG session; installs the DLL + mod there)
+    [string]$GogAll = ''  # every instance runs the GOG build from this folder (installs the DLL + mod there)
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot
 . "$PSScriptRoot\paths.ps1"
 $game = Get-BanishedDir
 $exeName = 'Application-steam-x64'
+$gogExe = 'Application-x64'
+if ($GogAll) {
+    $game = $GogAll
+    $exeName = $gogExe
+    Copy-Item "$root\build\dinput8.dll" "$GogAll\dinput8.dll" -Force
+    Copy-Item "$root\mod\bmpShare.pkm" "$GogAll\WinData\bmpShare.pkm" -Force
+}
+$dirs = @($game) + @(@($Gog0, $Gog1) | Where-Object { $_ } | Select-Object -Unique)
+foreach ($gd in @($Gog0, $Gog1) | Where-Object { $_ }) {
+    if (Get-Process $gogExe -ErrorAction SilentlyContinue) { throw "the GOG game is already running - close it first" }
+    Copy-Item "$root\build\dinput8.dll" "$gd\dinput8.dll" -Force
+    Copy-Item "$root\mod\bmpShare.pkm" "$gd\WinData\bmpShare.pkm" -Force
+}
 $out = "$root\recon\runs\net"
 New-Item -ItemType Directory -Force $out | Out-Null
 if (Get-Process $exeName -ErrorAction SilentlyContinue) { throw "Banished is already running - close it first" }
@@ -76,26 +92,30 @@ if ($Prewarm0) { $cmdLine += "`nprewarm@0=$Prewarm0" }
 if ($Prewarm1) { $cmdLine += "`nprewarm@1=$Prewarm1" }
 "save=$Save`nticks=$Ticks`nspeed=$Speed`nmode@0=idle`nmode@1=$(if ($Calm) {'idle'} else {'chaos'})`nmode@2=chaos`npauseevery=$PauseEvery`nspeedchaos=$(if ($NoSpeedChaos) {0} else {1})`n$cmdLine" | Set-Content "$game\bmp_autotest.txt" -Encoding ascii
 $start = Get-Date
+foreach ($d in $dirs | Select-Object -Skip 1) { Copy-Item "$game\bmp_net.txt", "$game\bmp_autotest.txt" $d -Force -ErrorAction SilentlyContinue }
 if ($NoMod1) { '1' | Set-Content "$game\bmp_nomod_p1.txt" }
-if ($Jitter) { '1' | Set-Content "$game\bmp_heapjitter_p1.txt"; '1' | Set-Content "$game\bmp_heapjitter_p2.txt" }
+if ($Jitter) { foreach ($d in $dirs) { '1' | Set-Content "$d\bmp_heapjitter_p1.txt"; '1' | Set-Content "$d\bmp_heapjitter_p2.txt" } }
 try {
-    Start-Process "$game\$exeName.exe" -WorkingDirectory $game | Out-Null
+    if ($Gog0) { Start-Process "$Gog0\$gogExe.exe" -WorkingDirectory $Gog0 | Out-Null }
+    else { Start-Process "$game\$exeName.exe" -WorkingDirectory $game | Out-Null }
     Start-Sleep 8
-    Start-Process "$game\$exeName.exe" -WorkingDirectory $game | Out-Null
+    if ($Gog1) { Start-Process "$Gog1\$gogExe.exe" -WorkingDirectory $Gog1 | Out-Null }
+    else { Start-Process "$game\$exeName.exe" -WorkingDirectory $game | Out-Null }
     if ($Players -ge 3) { Start-Sleep 8; Start-Process "$game\$exeName.exe" -WorkingDirectory $game | Out-Null }
     $deadline = $start.AddMinutes($TimeoutMin)
     Start-Sleep 20
-    while (Get-Process $exeName -ErrorAction SilentlyContinue) {
-        if ((Get-Date) -gt $deadline) { Stop-Process -Name $exeName -Force; Write-Host 'TIMEOUT'; break }
+    while (Get-Process $exeName, $gogExe -ErrorAction SilentlyContinue) {
+        if ((Get-Date) -gt $deadline) { Stop-Process -Name $exeName, $gogExe -Force -ErrorAction SilentlyContinue; Write-Host 'TIMEOUT'; break }
         Start-Sleep 3
     }
 } finally {
-    Remove-Item "$game\bmp_net.txt", "$game\bmp_autotest.txt", "$game\bmp_nomod_p1.txt", "$game\bmp_heapjitter_p1.txt", "$game\bmp_heapjitter_p2.txt" -ErrorAction SilentlyContinue
+    foreach ($d in $dirs) { Remove-Item "$d\bmp_net.txt", "$d\bmp_autotest.txt", "$d\bmp_nomod_p1.txt", "$d\bmp_heapjitter_p1.txt", "$d\bmp_heapjitter_p2.txt" -ErrorAction SilentlyContinue }
     Remove-Item "$([Environment]::GetFolderPath('MyDocuments'))\Banished\Save\MultiplayerTestP1.sav", "$([Environment]::GetFolderPath('MyDocuments'))\Banished\Save\MultiplayerTestP2.sav" -ErrorAction SilentlyContinue
     if ($relay) { Stop-Process -Id $relay.Id -Force -ErrorAction SilentlyContinue }
 }
 foreach ($s in '', '_p1', '_p2') {
-    $t = Get-ChildItem $game -Filter "bmp_ticks_*$s.log" | Where-Object { $_.LastWriteTime -ge $start -and ($s -or $_.Name -notmatch '_p\d\.log$') } |
+    $sg = if ($Gog1 -and $s -eq '_p1') { $Gog1 } elseif ($Gog0 -and $s -eq '') { $Gog0 } else { $game }
+    $t = Get-ChildItem $sg -Filter "bmp_ticks_*$s.log" | Where-Object { $_.LastWriteTime -ge $start -and ($s -or $_.Name -notmatch '_p\d\.log$') } |
         Sort-Object Name | Select-Object -Last 1
     $label = if ($s) { $s.TrimStart('_') } else { 'p0' }
     if ($t) {
@@ -103,7 +123,7 @@ foreach ($s in '', '_p1', '_p2') {
         $d = $t.FullName -replace 'bmp_ticks_', 'bmp_draws_'
         if (Test-Path $d) { Move-Item $d "$out\${stamp}_${label}_draws.log" }
     }
-    Copy-Item "$game\bmp$s.log" "$out\${stamp}_${label}_bmp.log" -ErrorAction SilentlyContinue
+    Copy-Item "$sg\bmp$s.log" "$out\${stamp}_${label}_bmp.log" -ErrorAction SilentlyContinue
 }
 Write-Host '--- relay:'
 if ($InGameHost) { Select-String -Path "$out\${stamp}_p0_bmp.log" -Pattern "net.host.|gameload: (loading|save loaded)" | Select-Object -Last 12 | ForEach-Object { $_.Line } }

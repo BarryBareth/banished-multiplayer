@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <cstdint>
 #include <cstdio>
+#include "gamebuild.h"
 
 // Several game instances can run from the same folder (local multiplayer testing): each claims a slot at
 // startup (named mutex) and suffixes its files with SlotSuffix() ("" for slot 0, "_p1" for slot 1, ...).
@@ -13,7 +14,7 @@ const wchar_t* SlotSuffix();
 void LogInit();
 void Log(const char* fmt, ...);
 
-// Resolve an export from Runtime-steam-x64.dll by mangled name; logs and returns nullptr if missing.
+// Resolve an export from the engine DLL (gamebuild::RuntimeDll()) by mangled name; logs and returns nullptr if missing.
 void* RuntimeExport(const char* mangled);
 
 // Install all hooks. Called once, on the game's main thread.

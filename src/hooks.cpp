@@ -51,6 +51,12 @@ static uintptr_t g_exeBase, g_exeEnd, g_rtBase, g_rtEnd;
 static DWORD g_mainThread;
 static FILE* g_ticks;
 static FILE* g_posDump;  // bmp_posdump.txt: exact villager x/y per tick
+static FILE* g_stateDump;  // bmp_statedump.txt: villager objects at some ticks of the first session
+static unsigned long long g_stateFrom, g_stateTo, g_stateStep, g_stateLast;
+static uint8_t* g_watchAddr;  // bmp_watch.txt: hardware write watch on one villager field (WatchTick)
+static unsigned long long g_watchFrom = ~0ull, g_watchTo;
+static int g_watchTown, g_watchIndex, g_watchOff;
+static void WatchTick();
 static bool g_loadAllocLog;  // bmp_loadallocs.txt: draws log gets "L gen caller size offset" for loader-thread allocations
 static FILE* g_draws;                       // every in-tick draw for the first kDrawLogTicks ticks
 // sim-heap allocation/free logging (size, offset, stack) for ticks in [g_allocLogFrom, g_allocLogTo]
@@ -135,6 +141,16 @@ static inline bool SimHeapContext(bool mainThread) {
 
 // First few game/engine frames of the current call stack (skipping our DLL, hook trampolines and
 // System::Random::*) = which system is doing something.
+// the engine's System::Random functions (skipped in recorded stacks): around Random::Serialize, which sits at rt+0xca560
+// in the Steam build's range rt+0xca500..0xca900 (the GOG build has them lower)
+static bool InRandomCode(uint32_t f) {
+    static uint32_t lo = [] {
+        uintptr_t s = (uintptr_t)RuntimeExport("?Serialize@Random@System@@QEAAXAEAVSerializer@IO@@@Z");
+        return s && s > g_rtBase ? 0x20000000u | uint32_t(s - g_rtBase - 0x60) : 0x200ca500u;
+    }();
+    return f >= lo && f < lo + 0x400;
+}
+
 static void StackStr(char* out, size_t n, int depth = 4) {
     void* frames[24];
     USHORT count = RtlCaptureStackBackTrace(2, 24, frames, nullptr);
@@ -142,7 +158,7 @@ static void StackStr(char* out, size_t n, int depth = 4) {
     out[0] = 0;
     for (USHORT i = 0; i < count && kept < depth; i++) {
         uint32_t f = CodeId(frames[i]);
-        if (!f || (f >= 0x200ca500 && f < 0x200ca900)) continue;
+        if (!f || InRandomCode(f)) continue;
         len += snprintf(out + len, n - len, " %08x", f);
         kept++;
     }
@@ -179,6 +195,20 @@ static void FlushTick() {
     g_s.chain = Fnv(g_s.chain, g_s.tickHash);
     g_s.simChain = Fnv(g_s.simChain, g_s.simHash);
     if (g_s.tick % 600 == 0) net::OnTickHash(g_s.tick, g_s.simChain, g_s.heapChain);
+    if (g_s.tick == 1 || g_s.tick == 1000) {  // floating-point state of the sim thread (must match between PCs/builds)
+        unsigned x87 = 0;
+        _controlfp_s(&x87, 0, 0);
+        Log("fp: tick %llu mxcsr %#x x87 control %#x", g_s.tick, _mm_getcsr(), x87);
+    }
+    if (g_watchFrom != ~0ull) WatchTick();
+    if (g_stateDump) {
+        if (g_s.tick < g_stateLast) { fclose(g_stateDump); g_stateDump = nullptr; }  // first session only
+        else if (g_s.tick >= g_stateFrom && g_s.tick <= g_stateTo && (g_s.tick - g_stateFrom) % g_stateStep == 0) {
+            towns::DumpCitizens(g_stateDump, g_s.tick);
+            fflush(g_stateDump);
+        }
+        g_stateLast = g_s.tick;
+    }
     char em[128];
     EmState(em, sizeof em);
     static char pos[8192];
@@ -235,7 +265,7 @@ static void RingAdd(uint32_t caller, uint64_t value, int32_t a, int32_t b) {
     void* frames[8];
     USHORT n = RtlCaptureStackBackTrace(3, 8, frames, nullptr);
     for (USHORT i = 0, k = 0; i < n && k < 3; i++)
-        if (uint32_t f = CodeId(frames[i]); f && !(f >= 0x200ca500 && f < 0x200ca900)) d.stack[k++] = f;
+        if (uint32_t f = CodeId(frames[i]); f && !InRandomCode(f)) d.stack[k++] = f;
 }
 // Extra in-sim events for the desync record (shown with their tag in the caller column): job offers, action starts.
 void ProbeNote(uint32_t tag, uint64_t value, int32_t a, int32_t b) {
@@ -270,10 +300,10 @@ static void RngNote(void* self, void* ret, uint64_t value, int32_t a = 0, int32_
         bool factory = self == FactoryRng();
         if (!factory) RingAdd(id, value, a, b);
         g_s.tickCalls++;
-        g_s.tickHash = Fnv(Fnv(g_s.tickHash, id), value);
+        g_s.tickHash = Fnv(g_s.tickHash, value);  // values only: caller ids differ between the Steam and GOG builds
         if (!factory) {
             g_s.simCalls++;
-            g_s.simHash = Fnv(Fnv(g_s.simHash, id), value);
+            g_s.simHash = Fnv(g_s.simHash, value);  // no caller id: it's a build-specific address (Steam/GOG players)
         }
         if (g_draws && g_s.tick <= kDrawLogTicks) {
             char stack[96];
@@ -292,7 +322,7 @@ alignas(16) static uint8_t g_uiRng[0x9d0];
 static bool g_uiRngReady;
 static uint64_t g_redirected;
 static void* SimRng() {
-    uint8_t* loop = *(uint8_t**)(g_exeBase + kRvaWorldSingleton);
+    uint8_t* loop = *(uint8_t**)(g_exeBase + Rva(kRvaWorldSingleton));
     return loop ? *(void**)(loop + 0xd8) : nullptr;
 }
 // Same for the object handle-tag RNG (InternalFactory+0x20): UI objects created between ticks must not shift
@@ -345,6 +375,10 @@ static std::mutex g_ctorMutex;  // main + loader thread
 static void* __fastcall h_RandTimeCtor(void* self) {
     void* r = o_RandTimeCtor(self);
     uint32_t site = CodeId(_ReturnAddress());
+    // seeds must agree between the Steam and GOG builds: exe call sites by their Steam address (tools/gog_table.py
+    // puts every Random() call site in the table)
+    if (site >> 28 == 1) site = 0x10000000u | (uint32_t)SteamRva(site & 0xfffffff);
+    else if (site >> 28 == 2 && gamebuild::Get() == gamebuild::kGog) Log("!! Random() constructed by the engine DLL (%08x) - its seed differs between builds", site);
     uint32_t n;
     { std::lock_guard<std::mutex> lock(g_ctorMutex); n = g_ctorCounts[site]++; }
     uint32_t seed = (uint32_t)Fnv(Fnv(kFnvBasis, site), n);
@@ -411,7 +445,7 @@ static SRWLOCK g_strayLock = SRWLOCK_INIT;
 // engine-heap allocations get random extra blocks around them (some freed again later), so this instance's objects end
 // up at different addresses AND in a different address order.
 static bool g_heapJitter;
-// Test (<game>mp_heapnudge<suffix>.txt, content = tick): one extra in-sim allocation at that tick on this instance only
+// Test (<game>\bmp_heapnudge<suffix>.txt, content = tick): one extra in-sim allocation at that tick on this instance only
 // = a sim-heap drift without any gameplay difference (the net HEAP check must report it and dump the ring).
 static uint64_t g_heapNudgeAt;
 static SRWLOCK g_jitterLock = SRWLOCK_INIT;
@@ -574,7 +608,7 @@ static uint64_t __fastcall h_GameLoopUpdate(void* self, const int64_t* dt) {
             uint8_t* world = *(uint8_t**)(gl + 0xf8);
             uint8_t* pf = world ? *(uint8_t**)(world + 0x68) : nullptr;
             if (pf) {
-                ((void(__fastcall*)(void*))(g_exeBase + kRvaPathFlush))(pf);
+                ((void(__fastcall*)(void*))(g_exeBase + Rva(kRvaPathFlush)))(pf);
                 pf[0x5c] = 1;
                 Log("pathfinder %p switched to synchronous solving", pf);
             } else {
@@ -582,7 +616,7 @@ static uint64_t __fastcall h_GameLoopUpdate(void* self, const int64_t* dt) {
             }
         }
         // The world's sim RNG: log its state (does the save restore it?) and reseed deterministically.
-        uint8_t* world = *(uint8_t**)(g_exeBase + kRvaWorldSingleton);
+        uint8_t* world = *(uint8_t**)(g_exeBase + Rva(kRvaWorldSingleton));
         uint8_t* rng = world ? *(uint8_t**)(world + 0xd8) : nullptr;
         if (rng) {
             uint64_t h = kFnvBasis;
@@ -811,7 +845,7 @@ static ProductionRows_t o_ProductionRows;
 static uint8_t* TrackerOf(uint8_t* entity) {
     static const uintptr_t kTiTracker = 0x1ccb10;  // TrackerComponent::typeinfo
     if (!entity || !*(uint8_t***)(entity + 0x30)) return nullptr;
-    int want = *(int*)(g_exeBase + kTiTracker);
+    int want = *(int*)(g_exeBase + Rva(kTiTracker));
     for (int i = 0; i < *(int*)(entity + 0x38); i++) {
         uint8_t* c = (*(uint8_t***)(entity + 0x30))[i];
         if (c && ((int(__fastcall*)(void*))(*(void***)c)[2])(c) == want) return c;
@@ -819,7 +853,7 @@ static uint8_t* TrackerOf(uint8_t* entity) {
     return nullptr;
 }
 static void __fastcall h_ProductionRows(uint8_t* ctl, int which) {
-    uint8_t* gl = *(uint8_t**)(g_exeBase + kRvaWorldSingleton);
+    uint8_t* gl = *(uint8_t**)(g_exeBase + Rva(kRvaWorldSingleton));
     uint8_t* stats = gl && *(int**)(gl + 0x128) ? TrackerOf(*(uint8_t**)(ctl + 0x28)) : nullptr;
     int year = stats ? **(int**)(gl + 0x128) : 0;
     if (!stats || *(int*)(stats + 0x48) == year) return o_ProductionRows(ctl, which);
@@ -925,7 +959,7 @@ static void __fastcall h_LoaderStartup(void* self) {
 using TreeErase_t = void*(__fastcall*)(void* set, void* node);
 static TreeErase_t o_TreeErase;
 static void* __fastcall h_TreeErase(void* set, void* node) {
-    uint8_t* loop = *(uint8_t**)(g_exeBase + kRvaWorldSingleton);
+    uint8_t* loop = *(uint8_t**)(g_exeBase + Rva(kRvaWorldSingleton));
     uint8_t* em = loop ? *(uint8_t**)(loop + 0xe8) : nullptr;
     if (!em || set != em + 0x78) return o_TreeErase(set, node);
     PosGuard pg("TreeErase(per-frame set)", _ReturnAddress());
@@ -1018,7 +1052,7 @@ static void __fastcall h_StepEnd(void* self, const int64_t* dt) {
         if (uint8_t* terrain = *(uint8_t**)(gl + 0x110)) {
             if (*(int*)(terrain + 0xf0) != 0) {  // dirty patches pending
                 t_visual++;
-                ((void(__fastcall*)(void*))(g_exeBase + 0xb0220))(terrain);
+                ((void(__fastcall*)(void*))(g_exeBase + Rva(0xb0220)))(terrain);
                 t_visual--;
             }
         }
@@ -1190,6 +1224,67 @@ static void CrashFrame(char* buf, size_t n, uintptr_t a) {
     else if (a >= g_selfBase && a < g_selfEnd) snprintf(buf, n, " dll+%llx", (unsigned long long)(a - g_selfBase));
     else snprintf(buf, n, " %llx", (unsigned long long)a);
 }
+// ---- debug write watch (<game>\bmp_watch.txt "TOWN INDEX OFFSET FROMTICK TOTICK"): a hardware write breakpoint on one
+// villager's CitizenComponent field; every write is logged with the tick, the new value and the code that wrote it
+static void SetWatch(uint8_t* addr) {
+    struct Arg { DWORD tid; uint8_t* addr; } arg{g_mainThread, addr};
+    HANDLE h = CreateThread(nullptr, 0, [](void* p) -> DWORD {
+        auto a = (Arg*)p;
+        HANDLE t = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_SET_CONTEXT, FALSE, a->tid);
+        if (!t) return 0;
+        SuspendThread(t);
+        CONTEXT c{};
+        c.ContextFlags = CONTEXT_DEBUG_REGISTERS;
+        GetThreadContext(t, &c);
+        c.Dr0 = (DWORD64)a->addr;
+        c.Dr7 = a->addr ? (1ull | (1ull << 16) | (3ull << 18)) : 0;  // L0, break on write, 4 bytes
+        SetThreadContext(t, &c);
+        ResumeThread(t);
+        CloseHandle(t);
+        return 0;
+    }, &arg, 0, nullptr);
+    if (h) { WaitForSingleObject(h, 2000); CloseHandle(h); }
+}
+static LONG CALLBACK WatchHandler(EXCEPTION_POINTERS* ep) {
+    if (ep->ExceptionRecord->ExceptionCode != EXCEPTION_SINGLE_STEP || !(ep->ContextRecord->Dr6 & 1)) return EXCEPTION_CONTINUE_SEARCH;
+    ep->ContextRecord->Dr6 = 0;
+    char line[512];
+    int len = snprintf(line, sizeof line, "watch: tick %llu%s town %d villager %d +%#x = %08x (%g) by", g_s.tick,
+                       g_s.inTick ? "" : " (outside a tick)", g_watchTown, g_watchIndex, g_watchOff, *(uint32_t*)g_watchAddr,
+                       *(float*)g_watchAddr);
+    CONTEXT ctx = *ep->ContextRecord;
+    for (int depth = 0; depth < 8 && ctx.Rip && len < (int)sizeof line - 40; depth++) {
+        CrashFrame(line + len, sizeof line - len, ctx.Rip);
+        len = (int)strlen(line);
+        DWORD64 imageBase;
+        PRUNTIME_FUNCTION fn = RtlLookupFunctionEntry(ctx.Rip, &imageBase, nullptr);
+        if (!fn) { ctx.Rip = *(DWORD64*)ctx.Rsp; ctx.Rsp += 8; continue; }
+        void* hd; DWORD64 est;
+        RtlVirtualUnwind(UNW_FLAG_NHANDLER, imageBase, ctx.Rip, fn, &ctx, &hd, &est, nullptr);
+    }
+    Log("%s", line);
+    return EXCEPTION_CONTINUE_EXECUTION;
+}
+static void WatchTick() {
+    if (g_s.tick == g_watchFrom && !g_watchAddr) {
+        uint8_t* gl = (uint8_t*)g_s.loop;
+        if (gl) Log("watch: GameLoop+0xd0 flags %08x", *(uint32_t*)(gl + 0xd0));
+        // town -1: the weather object (GameLoop+0x130, +0x18 = temperature) instead of a villager
+        uint8_t* c = g_watchTown < 0 ? (gl ? *(uint8_t**)(gl + 0x130) : nullptr) : (uint8_t*)towns::CitizenAt(g_watchTown, g_watchIndex);
+        if (c) {
+            g_watchAddr = c + g_watchOff;
+            Log("watch: armed on town %d villager %d +%#x at tick %llu, value %08x", g_watchTown, g_watchIndex, g_watchOff,
+                g_s.tick, *(uint32_t*)g_watchAddr);
+            SetWatch(g_watchAddr);
+        }
+    } else if (g_watchAddr && g_s.tick >= g_watchTo) {
+        SetWatch(nullptr);
+        g_watchAddr = nullptr;
+        g_watchFrom = ~0ull;
+        Log("watch: off");
+    }
+}
+
 static LONG CALLBACK CrashLogger(EXCEPTION_POINTERS* ep) {
     static volatile LONG count = 0;
     DWORD code = ep->ExceptionRecord->ExceptionCode;
@@ -1224,7 +1319,7 @@ void InstallHooks() {
         if (self) ModuleRange(self, g_selfBase, g_selfEnd);
         AddVectoredExceptionHandler(1, CrashLogger);  // first: the game's own handler writes crash.dmp and exits
     }
-    HMODULE exe = GetModuleHandleW(nullptr), rt = GetModuleHandleW(L"Runtime-steam-x64.dll");
+    HMODULE exe = GetModuleHandleW(nullptr), rt = GetModuleHandleW(gamebuild::RuntimeDll());
     ModuleRange(exe, g_exeBase, g_exeEnd);
     if (rt) ModuleRange(rt, g_rtBase, g_rtEnd);
 
@@ -1254,6 +1349,27 @@ void InstallHooks() {
         if (GetFileAttributesW(flag) != INVALID_FILE_ATTRIBUTES) {
             memcpy(wcsstr(path, L"bmp_draws_"), L"bmp_pos___", 10 * sizeof(wchar_t));
             g_posDump = _wfsopen(path, L"w", _SH_DENYNO);
+        }
+        // debug: <game>\bmp_statedump.txt "FROM TO STEP" -> bmp_state<sfx>.log = villager objects at those ticks of the
+        // first session (towns::DumpCitizens; tools/state_diff.py)
+        wcscpy_s(wcsrchr(flag, L'\\') + 1, 64, L"bmp_statedump.txt");
+        FILE* sf = nullptr;
+        if (!_wfopen_s(&sf, flag, L"r") && sf) {
+            fscanf_s(sf, "%llu %llu %llu", &g_stateFrom, &g_stateTo, &g_stateStep);
+            fclose(sf);
+            wchar_t sp[MAX_PATH];
+            wcscpy_s(sp, flag);
+            swprintf_s(wcsrchr(sp, L'\\') + 1, 64, L"bmp_state%s.log", SlotSuffix());
+            g_stateDump = _wfsopen(sp, L"w", _SH_DENYNO);
+            if (!g_stateStep) g_stateStep = 1;
+        }
+        wcscpy_s(wcsrchr(flag, L'\\') + 1, 64, L"bmp_watch.txt");
+        FILE* wf = nullptr;
+        if (!_wfopen_s(&wf, flag, L"r") && wf) {
+            if (fscanf_s(wf, "%d %d %i %llu %llu", &g_watchTown, &g_watchIndex, &g_watchOff, &g_watchFrom, &g_watchTo) == 5)
+                AddVectoredExceptionHandler(1, WatchHandler);
+            else g_watchFrom = ~0ull;
+            fclose(wf);
         }
     }
     p_InternalFactoryGet = (InternalFactoryGet_t)RuntimeExport("?Get@InternalFactory@Object@@SAPEAV12@XZ");
@@ -1296,13 +1412,13 @@ void InstallHooks() {
     Hook(m_RandTol, (void*)h_RandTol, (void**)&o_RandTol);
 
     auto nt = (IMAGE_NT_HEADERS*)((uint8_t*)exe + ((IMAGE_DOS_HEADER*)exe)->e_lfanew);
-    // test: <game>mp_fakeexe.txt = behave like an unknown game build (GOG / DRM-free)
-    bool fakeExe = GetFileAttributesW(L"bmp_fakeexe.txt") != INVALID_FILE_ATTRIBUTES;
-    if (nt->FileHeader.TimeDateStamp != kExeTimestamp || fakeExe) {
-        Log("!! exe timestamp %#x != expected %#x - unknown game build, exe hooks disabled (multiplayer needs the "
-            "current Steam build of Banished 1.0.7)", nt->FileHeader.TimeDateStamp, kExeTimestamp);
-        // tell the player once per start (GOG / DRM-free / other builds): otherwise nothing happens and the mod's
-        // main-menu notice even claims the DLL is missing
+    // Steam (kExeTimestamp) or GOG build: exe addresses go through Rva(). test: <game>\bmp_fakeexe.txt = unknown build
+    Log("game build: %s (exe timestamp %#x)", gamebuild::Name(), nt->FileHeader.TimeDateStamp);
+    if (gamebuild::Get() == gamebuild::kUnknown) {
+        Log("!! exe timestamp %#x is neither the Steam (%#x) nor the GOG build of Banished 1.0.7 - exe hooks disabled",
+            nt->FileHeader.TimeDateStamp, kExeTimestamp);
+        // tell the player once per start: otherwise nothing happens and the mod's main-menu notice even claims the
+        // DLL is missing
         std::thread([] {
             // wait for the game's window and attach the box to it - a box without owner opens behind the game
             HWND owner = nullptr;
@@ -1320,9 +1436,9 @@ void InstallHooks() {
             }
             Sleep(3000);  // let the main menu appear first
             MessageBoxW(owner,
-                L"Banished Multiplayer only works with the Steam version of Banished 1.0.7 for now.\n\n"
-                L"This copy of the game (GOG, DRM-free or another build) has a different program file, so the "
-                L"multiplayer stays switched off. The game itself runs normally.\n\n"
+                L"Banished Multiplayer works with the Steam and GOG versions of Banished 1.0.7.\n\n"
+                L"This copy of the game has a different program file, so the multiplayer stays switched off. "
+                L"The game itself runs normally.\n\n"
                 L"To remove the mod, delete dinput8.dll from the Banished folder.",
                 L"Banished Multiplayer", MB_OK | MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND);
         }).detach();
@@ -1331,21 +1447,21 @@ void InstallHooks() {
     towns::Install();  // fixed exe addresses: only on the known build
     gamewin::Install();
     tint::Install();
-    HookAt("GameLoop::Update", (void*)(g_exeBase + kRvaGameLoopUpdate), (void*)h_GameLoopUpdate, (void**)&o_GameLoopUpdate);
-    HookAt("World::Update", (void*)(g_exeBase + kRvaWorldUpdate), (void*)h_WorldUpdate, (void**)&o_WorldUpdate);
-    HookAt("TerrainPoint", (void*)(g_exeBase + 0xa48b0), (void*)h_TerrainPoint, (void**)&o_TerrainPoint);
-    HookAt("MapConnectivity", (void*)(g_exeBase + 0xa1950), (void*)h_MapConnect, (void**)&o_MapConnect);
-    HookAt("ProductionUI rows", (void*)(g_exeBase + 0x7af20), (void*)h_ProductionRows, (void**)&o_ProductionRows);
+    HookAt("GameLoop::Update", (void*)(g_exeBase + Rva(kRvaGameLoopUpdate)), (void*)h_GameLoopUpdate, (void**)&o_GameLoopUpdate);
+    HookAt("World::Update", (void*)(g_exeBase + Rva(kRvaWorldUpdate)), (void*)h_WorldUpdate, (void**)&o_WorldUpdate);
+    HookAt("TerrainPoint", (void*)(g_exeBase + Rva(0xa48b0)), (void*)h_TerrainPoint, (void**)&o_TerrainPoint);
+    HookAt("MapConnectivity", (void*)(g_exeBase + Rva(0xa1950)), (void*)h_MapConnect, (void**)&o_MapConnect);
+    HookAt("ProductionUI rows", (void*)(g_exeBase + Rva(0x7af20)), (void*)h_ProductionRows, (void**)&o_ProductionRows);
     Hook("?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z", (void*)h_PickIntersect, (void**)&o_PickIntersect);
     Hook("?RootAnimationOffset@MeshInstance@Graphics@@QEBA?AVVector3@Math@@XZ", (void*)h_RootOffset, (void**)&o_RootOffset);
     p_EnableRootOnly = (void (*)(bool))RuntimeExport("?EnableRootOnlyUpdates@MeshInstance@Graphics@@SAX_N@Z");
     Hook("?Update@AnimationManager@Graphics@@QEAAXAEBVTime@System@@_N@Z", (void*)h_AnimMgrUpdate, (void**)&o_AnimMgrUpdate);
-    HookAt("SimStepEnd", (void*)(g_exeBase + kRvaStepEnd), (void*)h_StepEnd, (void**)&o_StepEnd);
-    HookAt("EntityManager::AddEntity", (void*)(g_exeBase + kRvaAddEntity), (void*)h_AddEntity, (void**)&o_AddEntity);
-    HookAt("EntityManager::PerFrameSetSync", (void*)(g_exeBase + kRvaPerFrameSetSync), (void*)h_PerFrameSetSync, (void**)&o_PerFrameSetSync);
-    HookAt("ComponentEntity::FlagsChanged", (void*)(g_exeBase + kRvaEntityFlagsChanged), (void*)h_EntityFlagsChanged, (void**)&o_EntityFlagsChanged);
-    HookAt("TreeErase", (void*)(g_exeBase + kRvaTreeErase), (void*)h_TreeErase, (void**)&o_TreeErase);
-    HookAt("EntityManager::RemoveEntity", (void*)(g_exeBase + kRvaRemoveEntity), (void*)h_RemoveEntity, (void**)&o_RemoveEntity);
+    HookAt("SimStepEnd", (void*)(g_exeBase + Rva(kRvaStepEnd)), (void*)h_StepEnd, (void**)&o_StepEnd);
+    HookAt("EntityManager::AddEntity", (void*)(g_exeBase + Rva(kRvaAddEntity)), (void*)h_AddEntity, (void**)&o_AddEntity);
+    HookAt("EntityManager::PerFrameSetSync", (void*)(g_exeBase + Rva(kRvaPerFrameSetSync)), (void*)h_PerFrameSetSync, (void**)&o_PerFrameSetSync);
+    HookAt("ComponentEntity::FlagsChanged", (void*)(g_exeBase + Rva(kRvaEntityFlagsChanged)), (void*)h_EntityFlagsChanged, (void**)&o_EntityFlagsChanged);
+    HookAt("TreeErase", (void*)(g_exeBase + Rva(kRvaTreeErase)), (void*)h_TreeErase, (void**)&o_TreeErase);
+    HookAt("EntityManager::RemoveEntity", (void*)(g_exeBase + Rva(kRvaRemoveEntity)), (void*)h_RemoveEntity, (void**)&o_RemoveEntity);
     if (o_RandSeedCtor) {
         o_RandSeedCtor(g_uiRng, 0x0011AA11);
         o_RandSeedCtor(g_uiTagRng, 0x0022BB22);
@@ -1353,8 +1469,9 @@ void InstallHooks() {
     }
     Hook("?Update@MainLoop@Engine@@QEAA_NAEBVTime@System@@@Z", (void*)h_MainLoopUpdate, (void**)&o_MainLoopUpdate);
     Hook("?Update@AchievementManager@Achievement@@QEAAXAEBVTime@System@@@Z", (void*)h_AchievementUpdate, (void**)&o_AchievementUpdate);
-    Hook("?OnUserStatsReceived@AchievementManager@Achievement@@QEAAXPEAUUserStatsReceived_t@@@Z", (void*)h_StatsReceived,
-         (void**)&o_StatsReceived);
+    if (gamebuild::Get() == gamebuild::kSteam)  // Steam achievements: the GOG build has no such export
+        Hook("?OnUserStatsReceived@AchievementManager@Achievement@@QEAAXPEAUUserStatsReceived_t@@@Z", (void*)h_StatsReceived,
+             (void**)&o_StatsReceived);
     gameload::Init();
     {
         wchar_t dbg[MAX_PATH];
@@ -1398,7 +1515,7 @@ void InstallHooks() {
     {
         static const uintptr_t kVisualEntries[] = {0xb0620, 0xb2260, 0xb4220, 0xb4840, 0xb55b0, 0xb5700, 0xb59a0,
                                                    0xb60b0, 0xb6120, 0xb61d0, 0xb6250, 0xb6460, 0xb65b0};
-        for (uintptr_t rva : kVisualEntries) WrapVisual((void*)(g_exeBase + rva), "terrain/decal entry");
+        for (uintptr_t rva : kVisualEntries) WrapVisual((void*)(g_exeBase + Rva(rva)), "terrain/decal entry");
         Log("visual scope: %zu terrain/decal entry points wrapped", sizeof kVisualEntries / sizeof kVisualEntries[0]);
     }
     autotest::Init();

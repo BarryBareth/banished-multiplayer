@@ -62,6 +62,8 @@ std::string StorageSummary(int town);  // tests: "N storages (own a, from others
 // order). Read-only; written to the tick log so cross-PC desyncs show the first villager that drifted.
 void PositionHashes(char* out, size_t n);
 int CopyPositions(float* out, int maxVillagers);
+void DumpCitizens(FILE* f, uint64_t tick);  // debug: villager objects as words (bmp_statedump.txt)
+void* CitizenAt(int town, int index);       // debug: Town+0xa0 entry (CitizenComponent) or nullptr
 extern bool g_copyZ;  // debug (POSWATCH "z"): CopyPositions reports heights in the x slot  // x, y per villager (same order); returns the count
 int Local();                        // this machine's town
 void SetPlayers(int n);             // players in the session: loading a multi-town save makes a town for each

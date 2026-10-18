@@ -3,24 +3,29 @@
 # buildings. PASS needs: every "expect" passed, both instances executed the same commands, the simulations stayed
 # identical, the guest's 4 attempts were refused, and the town hall profession change was sent.
 #   .\tools\uitest.ps1
-param([int]$Ticks = 17600)
+param([int]$Ticks = 17600, [string]$Gog0 = '', [string]$Gog1 = '')  # -Gog0 / -Gog1 DIR: host / guest run the GOG build
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot
 . "$PSScriptRoot\paths.ps1"
 $game = Get-BanishedDir
+$hostDir = if ($Gog0) { $Gog0 } else { $game }
+$guestDir = if ($Gog1) { $Gog1 } else { $game }
+$gogArgs = @{}
+if ($Gog0) { $gogArgs.Gog0 = $Gog0 }
+if ($Gog1) { $gogArgs.Gog1 = $Gog1 }
 $out = & "$PSScriptRoot\nettest.ps1" -InGameHost -NoPick -Separate '12345,1,2,0,0' -Calm -Speed 10 -NoSpeedChaos -Ticks $Ticks `
-    -TimeoutMin 14 -UiScript "$root\tests\uitests\host_controls.txt" -UiScript1 "$root\tests\uitests\guest_foreign.txt" 2>&1
+    -TimeoutMin 14 -UiScript "$root\tests\uitests\host_controls.txt" -UiScript1 "$root\tests\uitests\guest_foreign.txt" @gogArgs 2>&1
 $fail = @()
 $cmp = $out | Select-String 'IDENTICAL|diverged' | ForEach-Object Line
 if (-not $cmp) { $fail += 'no comparison output (did the games run?)' }
 $cmp | Where-Object { $_ -match 'diverged' } | ForEach-Object { $fail += "simulation: $_" }
-if (Test-Path "$game\crash.dmp") { if ((Get-Item "$game\crash.dmp").LastWriteTime -gt (Get-Date).AddMinutes(-15)) { $fail += 'a game crashed (crash.dmp)' } }
-$host0 = Get-Content "$game\bmp.log"
+foreach ($cd in $hostDir, $guestDir) { if ((Test-Path "$cd\crash.dmp") -and (Get-Item "$cd\crash.dmp").LastWriteTime -gt (Get-Date).AddMinutes(-15)) { $fail += 'a game crashed (crash.dmp)' } }
+$host0 = Get-Content "$hostDir\bmp.log"
 $tests = $host0 | Select-String 'UITEST (PASS|FAIL)' | ForEach-Object Line
 $tests | Where-Object { $_ -match 'UITEST FAIL' } | ForEach-Object { $fail += $_ }
 if (($tests | Measure-Object).Count -lt 7) { $fail += "only $(($tests | Measure-Object).Count) of 7 expects ran" }
 $host0 | Select-String '!! uiscript' | ForEach-Object { $fail += $_.Line }
-$guest = Get-Content "$game\bmp_p1.log"
+$guest = Get-Content "$guestDir\bmp_p1.log"
 # a desync is fixed by an automatic resync (the comparison then only sees the reloaded session): count it as a failure
 ($host0 + $guest) | Select-String 'DESYNC at tick' | Select-Object -First 3 | ForEach-Object { $fail += "desync: $($_.Line)" }
 # two hooks on one function (MinHook) silently break the later one (e.g. +/- worker buttons went local-only)
@@ -28,7 +33,7 @@ $guest = Get-Content "$game\bmp_p1.log"
     Select-Object -First 5 | ForEach-Object { $fail += "hook: $($_.Line)" }
 $refused = ($guest | Select-String "window command on town 0's object ignored|profession change in town 0's town hall ignored" | Measure-Object).Count
 if ($refused -ne 6) { $fail += "guest: $refused of 6 attempts refused" }
-$c0 = Get-Content "$game\bmp_commands.log"; $c1 = Get-Content "$game\bmp_commands_p1.log"
+$c0 = Get-Content "$hostDir\bmp_commands.log"; $c1 = Get-Content "$guestDir\bmp_commands_p1.log"
 if (Compare-Object $c0 $c1) { $fail += 'host and guest executed different commands' }
 if (-not ($c0 | Select-String '^\d+ win 10 0 0 1 1 - 0 -> 1')) { $fail += 'town hall profession change was not sent' }
 if (-not ($c0 | Select-String 'win 23 \S+ 5 1 0 - \S+ -> 1')) { $fail += 'trading post order move was not executed' }

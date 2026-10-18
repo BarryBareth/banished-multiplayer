@@ -388,9 +388,9 @@ static Job MakeJob(bool crash, bool send, const std::string& description) {
     char head[1024];
     sprintf_s(head,
               "Banished Multiplayer bug report\n"
-              "kind: %s\ntime (UTC): %04d-%02d-%02d %02d:%02d:%02d\nmod build: %s\nsession: %s\n"
+              "kind: %s\ntime (UTC): %04d-%02d-%02d %02d:%02d:%02d\nmod build: %s\ngame build: %s\nsession: %s\n"
               "multiplayer: %s, %d players, %d towns, my town %d, %s\nconnection: %s\nwindows: %lu.%lu.%lu\ngraphics: %s\n\n",
-              crash ? "crash" : "bug", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond, u.version.c_str(),
+              crash ? "crash" : "bug", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond, u.version.c_str(), gamebuild::Name(),
               sessionKey.empty() ? "-" : Hex(Fnv("bmp-session:" + sessionKey), 8).c_str(),
               u.active ? (u.hosting ? "hosting" : "joined") : "not in a session", u.players, u.towns, u.town,
               u.inGame ? "in game" : u.inMenu ? "in the menu" : "loading", steam::Lobby() ? "Steam" : !u.room.empty() ? "relay" : u.active ? "direct" : "-",

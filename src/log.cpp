@@ -51,7 +51,7 @@ void Log(const char* fmt, ...) {
 }
 
 void* RuntimeExport(const char* mangled) {
-    static HMODULE rt = GetModuleHandleW(L"Runtime-steam-x64.dll");
+    static HMODULE rt = GetModuleHandleW(gamebuild::RuntimeDll());
     void* p = rt ? (void*)GetProcAddress(rt, mangled) : nullptr;
     if (!p) Log("!! missing export %s", mangled);
     return p;

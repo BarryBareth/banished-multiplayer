@@ -89,14 +89,14 @@ static bool Readable(const void* p, size_t n = 8) {
 static uintptr_t VtRva(const void* p) {
     if (!Readable(p)) return 0;
     uintptr_t vt = *(const uintptr_t*)p;
-    return vt > g_exe && vt < g_exe + 0x300000 ? vt - g_exe : 0;
+    return vt > g_exe && vt < g_exe + 0x300000 ? SteamRva(vt - g_exe) : 0;  // Steam RVA on every build
 }
 static bool IsEntity(const void* p) { return VtRva(p) == kVtComponentEntity; }
 static uint8_t* GameLoop() { return (uint8_t*)ProbeGameLoop(); }
 
 static bool EntityCell(uint8_t* e, int* x, int* y) {  // MapComponent (exe+0x4680): +0x28/+0x2a cell
     void* map = nullptr;
-    ((void(__fastcall*)(void*, void**))(g_exe + 0x4680))(e, &map);
+    ((void(__fastcall*)(void*, void**))(g_exe + Rva(0x4680)))(e, &map);
     if (!map) return false;
     *x = *(short*)((uint8_t*)map + 0x28);
     *y = *(short*)((uint8_t*)map + 0x2a);
@@ -161,8 +161,8 @@ static void List(unsigned only = 0) {  // only: just entities with a component o
         if (only && !strstr(line, (" " + ToHex(only)).c_str())) continue;
         if (!building || !EntityCell(e, &x, &y)) continue;
         void* mc = nullptr;
-        ((void(__fastcall*)(void*, void**))(g_exe + 0x4680))(e, &mc);
-        int uiType = *(int*)(g_exe + 0x1cffc8), hasUi = 0;
+        ((void(__fastcall*)(void*, void**))(g_exe + Rva(0x4680)))(e, &mc);
+        int uiType = *(int*)(g_exe + Rva(0x1cffc8)), hasUi = 0;
         for (int c = 0; c < comps; c++) {
             uint8_t* comp = (*(uint8_t***)(e + 0x30))[c];
             hasUi |= ((int(__fastcall*)(void*))(*(void***)comp)[2])(comp) == uiType;
@@ -175,7 +175,7 @@ static void List(unsigned only = 0) {  // only: just entities with a component o
 
 // The template's placement sub-description (template +0x28 array of descriptions, +0x30 count; type id via vf2).
 static uint8_t* SubDesc(uint8_t* tpl, uintptr_t typeinfoRva) {
-    int want = *(int*)(g_exe + typeinfoRva), n = *(int*)(tpl + 0x30);
+    int want = *(int*)(g_exe + Rva(typeinfoRva)), n = *(int*)(tpl + 0x30);
     for (int i = 0; i < n; i++) {
         uint8_t* d = (*(uint8_t***)(tpl + 0x28))[i];
         if (((int(__fastcall*)(void*))(*(void***)d)[2])(d) == want) return d;
@@ -188,7 +188,7 @@ static void* EntityAt(int x, int y) {
     uint8_t* gl = GameLoop();
     uint8_t* mgr = gl ? *(uint8_t**)(gl + 0xe8) : nullptr;
     if (!mgr) return nullptr;
-    int uiType = *(int*)(g_exe + 0x1cffc8);
+    int uiType = *(int*)(g_exe + Rva(0x1cffc8));
     void* best = nullptr;
     int bestArea = 1 << 30;
     for (int i = 0; i < *(int*)(mgr + 0x10); i++) {
@@ -197,7 +197,7 @@ static void* EntityAt(int x, int y) {
         (void)uiType;
         if (!*(uint8_t**)(e + 0x28) || !SubDesc(*(uint8_t**)(e + 0x28), 0x1cff90)) continue;  // no window (UIDescription)
         void* map = nullptr;
-        ((void(__fastcall*)(void*, void**))(g_exe + 0x4680))(e, &map);
+        ((void(__fastcall*)(void*, void**))(g_exe + Rva(0x4680)))(e, &map);
         if (!map) continue;
         short x0 = *(short*)((uint8_t*)map + 0x28), y0 = *(short*)((uint8_t*)map + 0x2a);
         short w = *(short*)((uint8_t*)map + 0x2c), h = *(short*)((uint8_t*)map + 0x2e);
@@ -246,9 +246,9 @@ static bool PlacementValid(uint8_t* tool, int x0, int y0, int x1, int y1, int ro
     uint8_t* placed = *(uint8_t**)(tool + 0x28);
     uint8_t* other = *(uint8_t**)(tool + 0x30);
     if (!placed || !other) return false;
-    uint32_t f = *(uint32_t*)(g_exe + 0x178948);
+    uint32_t f = *(uint32_t*)(g_exe + Rva(0x178948));
     void* map = *(void**)(GameLoop() + 0xf8);
-    return (uint8_t)((Valid_t)(g_exe + 0xa2a50))(map, x0, y0, x1 - x0 + 1, y1 - y0 + 1, *(uint32_t*)(placed + 0x20),
+    return (uint8_t)((Valid_t)(g_exe + Rva(0xa2a50)))(map, x0, y0, x1 - x0 + 1, y1 - y0 + 1, *(uint32_t*)(placed + 0x20),
                                                placed + 0x30, placed + 0x28, 0, f, 0, 0, other + 0x28, rotDeg,
                                                *(uint64_t*)(placed + 0x50)) != 0;
 }
@@ -280,7 +280,7 @@ static void Build(const std::string& text) {
         int w = *(int*)(placed + 0x44), h = *(int*)(placed + 0x48);
         int wx = (rot & 1) ? h : w, wy = (rot & 1) ? w : h;
         if (validated) {  // the game decides: spiral around X,Y, all four rotations
-            uint8_t* tool = (uint8_t*)commands::ToolFor(*(uint32_t*)(g_exe + kTiPlacementTool), path);
+            uint8_t* tool = (uint8_t*)commands::ToolFor(*(uint32_t*)(g_exe + Rva(kTiPlacementTool)), path);
             bool found = false;
             for (int r = 0; r < 70 && !found && tool; r++)
                 for (int dy = -r; dy <= r && !found; dy++)
@@ -311,7 +311,7 @@ static void Build(const std::string& text) {
         // ground is flat at height 0 - recorded player placements all carry z = 0)
         float half = (float)(size >> 1) - 0.5f;
         float ox = ((float)x0 + (float)x1) * 0.5f - half, oy = ((float)y0 + (float)y1) * 0.5f - half;
-        sprintf_s(cmd, "place %u %s %d %d %d %d %a %a %a %a 0 %d", *(uint32_t*)(g_exe + kTiPlacementTool), path, x0, y0,
+        sprintf_s(cmd, "place %u %s %d %d %d %d %a %a %a %a 0 %d", *(uint32_t*)(g_exe + Rva(kTiPlacementTool)), path, x0, y0,
                   x1, y1, ox, oy, 0.f, (float)rot * 90.f, rot);
     } else {
         if (nearby) {
@@ -333,7 +333,7 @@ static void Build(const std::string& text) {
             x0 = x; y0 = y; x1 = p3; y1 = p4;
         }
         sprintf_s(cmd, "drag%d %u %s %d %d %s", fenced ? 2 : 1,
-                  *(uint32_t*)(g_exe + (fenced ? kTiFencedTool : kTiDragPlacementTool)), path, y0 * size + x0,
+                  *(uint32_t*)(g_exe + Rva((fenced ? kTiFencedTool : kTiDragPlacementTool))), path, y0 * size + x0,
                   y1 * size + x1, fenced ? "0 0 0" : "-1 0 0");
     }
     Log("uiscript: build %s at %d,%d-%d,%d -> %s", path, x0, y0, x1, y1, cmd);
@@ -357,7 +357,7 @@ static void* OpenWindow(uint8_t* e, uint8_t* templ = nullptr) {
     uint8_t* uiDesc = SubDesc(e ? *(uint8_t**)(e + 0x28) : templ, 0x1cff90);  // UIDescription
     if (!uiDesc) { Log("!! uiscript: this building has no window (no UIDescription)"); return nullptr; }
     uint8_t* uiComp = nullptr;
-    int want = *(int*)(g_exe + 0x1cffc8);  // UIComponent
+    int want = *(int*)(g_exe + Rva(0x1cffc8));  // UIComponent
     for (int i = 0; e && i < *(int*)(e + 0x38); i++) {
         uint8_t* c = (*(uint8_t***)(e + 0x30))[i];
         if (((int(__fastcall*)(void*))(*(void***)c)[2])(c) == want) { uiComp = c; break; }
@@ -368,7 +368,7 @@ static void* OpenWindow(uint8_t* e, uint8_t* templ = nullptr) {
     using Ctor_t = void*(__fastcall*)(void*, void*, void*, void**, void*, void*, int);
     ((Ctor_t)ctor)(dlg, ui, *(void**)(uiDesc + 0x28), &parent, e, uiComp ? *(void**)(uiComp + 0x28) : nullptr,
                    uiComp ? *(int*)(uiComp + 0x30) : 0);
-    *(uintptr_t*)dlg = g_exe + 0x1659b0;
+    *(uintptr_t*)dlg = g_exe + Rva(0x1659b0);
     void* ref = dlg;
     ((void(__fastcall*)(void*, void**))addDialog)(ui, &ref);
     if (setUpperLeft) ((void(__fastcall*)(void*, int, int, bool))setUpperLeft)(dlg, 200, 120, false);
@@ -417,7 +417,7 @@ static void Browse() {
         void* desc = commands::DescFromPath(path);
         void* dlg = nullptr;
         if (desc && *(void**)(gl + 0x120))
-            ((void(__fastcall*)(void*, void**, void*))(g_exe + 0x106f50))(*(void**)(gl + 0x120), &dlg, desc);
+            ((void(__fastcall*)(void*, void**, void*))(g_exe + Rva(0x106f50)))(*(void**)(gl + 0x120), &dlg, desc);
         if (dlg) g_opened.push_back(dlg);
         if (g_browseCount++ < 60) Log("uiscript: browse #%d %s -> window %p", g_browseCount, path, dlg);
         return;
@@ -442,7 +442,7 @@ static std::string g_lastState;  // the last state line (for expect)
 static std::string StateOf(uint8_t* e) {
     auto get = [&](uintptr_t rva) {
         void* c = nullptr;
-        ((void(__fastcall*)(void*, void**))(g_exe + rva))(e, &c);
+        ((void(__fastcall*)(void*, void**))(g_exe + Rva(rva)))(e, &c);
         return (uint8_t*)c;
     };
     char buf[512];
@@ -487,7 +487,7 @@ static void Run(const std::string& text) {
     if (v == "select") {  // select PATH | select none: pick a tool like the toolbar (exe+0x108030(toolUI, template))
         void* desc = std::string(a) == "none" ? nullptr : commands::DescFromPath(a);
         if (gl && *(void**)(gl + 0x120) && (desc || std::string(a) == "none")) {
-            ((void(__fastcall*)(void*, void*))(g_exe + 0x108030))(*(void**)(gl + 0x120), desc);
+            ((void(__fastcall*)(void*, void*))(g_exe + Rva(0x108030)))(*(void**)(gl + 0x120), desc);
             Log("uiscript: selected tool %s", a);
         } else {
             Log("uiscript: select %s: not found", a);
@@ -619,7 +619,7 @@ static void Run(const std::string& text) {
         void* desc = commands::DescFromPath(a);
         void* dlg = nullptr;  // the toolbar's Utility action: exe+0x106f50(toolUI, &window, template) (owner = template)
         if (desc && gl && *(void**)(gl + 0x120))
-            ((void(__fastcall*)(void*, void**, void*))(g_exe + 0x106f50))(*(void**)(gl + 0x120), &dlg, desc);
+            ((void(__fastcall*)(void*, void**, void*))(g_exe + Rva(0x106f50)))(*(void**)(gl + 0x120), &dlg, desc);
         if (dlg) g_opened.push_back(dlg);
         Log("uiscript: openui %s -> window %p", a, dlg);
         return;

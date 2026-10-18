@@ -4,8 +4,9 @@ BANISHED MULTIPLAYER  (version {VERSION})
 Play Banished together with other players: share one town, or each build your own town on the same map
 (and trade with each other).
 
-Needs: the Steam version of Banished (1.0.7, the normal 64-bit game). Everybody in a game needs the
-same version of this mod.
+Needs: Banished 1.0.7 (the normal 64-bit game), the Steam or GOG version - Steam and GOG players can
+play together (on GOG: connect through a relay server or directly, there is no Steam). Everybody in a
+game needs the same version of this mod.
 
 Project page (downloads, instructions, source code): {REPO}
 
@@ -14,10 +15,11 @@ INSTALL
 -------
 1. Close Banished.
 2. Unpack this zip anywhere and double-click Install.bat.
-   It finds Banished by itself (or asks where it is) and copies two files:
+   It finds Banished by itself (Steam and GOG; or asks where it is) and copies two files:
      dinput8.dll   -> the Banished folder
      bmpShare.pkm  -> Banished\WinData
-3. Start Banished from Steam. The main menu now has a Multiplayer button.
+   Not found? Unpack this zip into the Banished folder itself and run Install.bat from there.
+3. Start Banished. The main menu now has a Multiplayer button.
 
 Windows may warn about Install.bat or the DLL because they're new and unsigned. The mod works by
 loading dinput8.dll into the game; that is also why antivirus programs sometimes ask about it.

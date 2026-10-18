@@ -209,7 +209,7 @@ static uint64_t __fastcall h_Place(void* tool, int x0, int y0, int x1, int y1, f
     c.rotIndex = RotationOf(tool);
     Enqueue(std::move(c));
     // vanilla re-rolls the live tool's preview variant after a successful placement (UI RNG outside ticks)
-    ((void(__fastcall*)(void*))(g_exe + kRvaRerollVariant))(tool);
+    ((void(__fastcall*)(void*))(g_exe + Rva(kRvaRerollVariant)))(tool);
     return 1;  // the UI plays the success sound; the full validation runs again at execution
 }
 
@@ -265,7 +265,7 @@ static NumGetFn p_NumberGet;
 using SpinnerSet_t = void(__fastcall*)(void* spinner, int value);
 static SpinnerSet_t p_SpinnerSet = [](void*, int) {};
 
-template <class F> static F Exe(uintptr_t rva) { return (F)(g_exe + rva); }
+template <class F> static F Exe(uintptr_t rva) { return (F)(g_exe + Rva(rva)); }
 static uint8_t* GameLoop() { return (uint8_t*)ProbeGameLoop(); }
 static void* Mgr() { return *(void**)(GameLoop() + 0xf0); }
 
@@ -285,7 +285,7 @@ static std::string SafePath(void* external) {
 
 static uint32_t VtableRva(void* p) {
     uintptr_t vt = *(uintptr_t*)p;
-    return vt > g_exe && vt < g_exe + 0x300000 ? (uint32_t)(vt - g_exe) : 0;
+    return vt > g_exe && vt < g_exe + 0x300000 ? (uint32_t)SteamRva(vt - g_exe) : 0;  // Steam RVA on every build
 }
 
 static uint32_t g_lastObjType;  // type of the object most recently referenced by ObjRef
@@ -750,7 +750,7 @@ static int ExecuteTradePost(uint8_t* comp, const Command& c) {
 }
 
 static bool DescHas(void* desc, uintptr_t typeinfoRva) {  // description's sub-descriptions: +0x28 array, +0x30 count
-    int want = *(int*)(g_exe + typeinfoRva), n = *(int*)((uint8_t*)desc + 0x30);
+    int want = *(int*)(g_exe + Rva(typeinfoRva)), n = *(int*)((uint8_t*)desc + 0x30);
     for (int i = 0; i < n; i++) {
         void* d = (*(void***)((uint8_t*)desc + 0x28))[i];
         if (((int(__fastcall*)(void*))(*(void***)d)[2])(d) == want) return true;
@@ -931,14 +931,14 @@ static int ExecuteWindow(const Command& c) {
 }
 
 template <int... Is> static void HookCallObjs(uintptr_t exe, std::integer_sequence<int, Is...>) {
-    ((MH_CreateHook((void*)(exe + kCallObjHooks[Is].rva), (void*)h_CallObj<Is>, (void**)&o_CallObj[Is]) == MH_OK
-          ? (void)MH_EnableHook((void*)(exe + kCallObjHooks[Is].rva))
+    ((MH_CreateHook((void*)(exe + Rva(kCallObjHooks[Is].rva)), (void*)h_CallObj<Is>, (void**)&o_CallObj[Is]) == MH_OK
+          ? (void)MH_EnableHook((void*)(exe + Rva(kCallObjHooks[Is].rva)))
           : Log("commands: hook %s failed", kCallObjHooks[Is].name)),
      ...);
 }
 
 static void HookAtRva(uintptr_t rva, void* detour, void** orig, const char* name) {
-    if (MH_CreateHook((void*)(g_exe + rva), detour, orig) == MH_OK) MH_EnableHook((void*)(g_exe + rva));
+    if (MH_CreateHook((void*)(g_exe + Rva(rva)), detour, orig) == MH_OK) MH_EnableHook((void*)(g_exe + Rva(rva)));
     else Log("commands: hook %s failed", name);
 }
 
@@ -1282,8 +1282,8 @@ bool LoadReplay(const wchar_t* path) {
 }
 
 template <int... Is> static void HookDrags(uintptr_t exe, std::integer_sequence<int, Is...>) {
-    ((MH_CreateHook((void*)(exe + kDrag[Is].rva), (void*)h_Drag<Is>, (void**)&o_Drag[Is]) == MH_OK
-          ? (void)MH_EnableHook((void*)(exe + kDrag[Is].rva))
+    ((MH_CreateHook((void*)(exe + Rva(kDrag[Is].rva)), (void*)h_Drag<Is>, (void**)&o_Drag[Is]) == MH_OK
+          ? (void)MH_EnableHook((void*)(exe + Rva(kDrag[Is].rva)))
           : Log("commands: hook drag %s failed", kDrag[Is].name)),
      ...);
 }
@@ -1299,8 +1299,8 @@ void Install(uintptr_t exe, const wchar_t* logPath) {
     p_CreateObject = (CreateObjectFn)RuntimeExport("?CreateObject@Factory@Object@@QEBAPEAVBase@2@I@Z");
     p_FilenameCtor = (FilenameCtorFn)RuntimeExport("??0Filename@System@@QEAA@PEBD@Z");
     p_StringDtor = (StringDtorFn)RuntimeExport("??1String@System@@QEAA@XZ");
-    if (MH_CreateHook((void*)(exe + kRvaPlaceBuilding), (void*)h_Place, (void**)&o_Place) == MH_OK)
-        MH_EnableHook((void*)(exe + kRvaPlaceBuilding));
+    if (MH_CreateHook((void*)(exe + Rva(kRvaPlaceBuilding)), (void*)h_Place, (void**)&o_Place) == MH_OK)
+        MH_EnableHook((void*)(exe + Rva(kRvaPlaceBuilding)));
     else
         Log("commands: hook PlaceBuilding failed");
     HookDrags(exe, std::make_integer_sequence<int, kDragCount>{});

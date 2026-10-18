@@ -43,6 +43,14 @@ yourself (another compiler version, another checkout, even other line endings) a
 release byte for byte. To play with people on the release, use the release's DLL; to test your own build, give the
 other players your DLL.
 
+New exe addresses in the source also need an entry in `src\gog_rvas.h` for the GOG build (otherwise the DLL logs
+"no GOG address" and the feature breaks there). With both builds installed:
+
+```
+python -I tools\gog_match.py <Steam>\Application-steam-x64.exe <GOG>\Application-x64.exe recon\gog\funcmap.tsv
+python -I tools\gog_table.py <Steam>\Application-steam-x64.exe <GOG>\Application-x64.exe
+```
+
 `build.ps1` also writes `src\repo_gen.h` from `repo.txt` (`owner/name` of the GitHub repository: the update check
 and the "get the DLL" texts point there). Forks: change `repo.txt`.
 

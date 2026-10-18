@@ -1161,8 +1161,8 @@ static void HookPresent() {
 void Init() {
     HookPresent();  // may fail or be skipped: the main menu button and the game windows don't depend on it
     uintptr_t exe = (uintptr_t)GetModuleHandleW(nullptr);
-    void* menuInit = (void*)(exe + 0xb91a0);   // MainMenuDialog::vf4
-    void* menuEvent = (void*)(exe + 0xb9020);  // MainMenuDialog::vf8
+    void* menuInit = (void*)(exe + Rva(0xb91a0));   // MainMenuDialog::vf4
+    void* menuEvent = (void*)(exe + Rva(0xb9020));  // MainMenuDialog::vf8
     MH_STATUS c = MH_CreateHook(menuInit, (void*)h_MenuInit, (void**)&o_MenuInit);
     MH_STATUS d = MH_CreateHook(menuEvent, (void*)h_MenuEvent, (void**)&o_MenuEvent);
     if (c == MH_OK) MH_EnableHook(menuInit);

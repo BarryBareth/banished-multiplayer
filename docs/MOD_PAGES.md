@@ -36,7 +36,7 @@ Every player's game runs the whole simulation in sync and only the players' acti
 [/list]
 To uninstall, run Uninstall.bat. To install by hand, copy the two files to the places above.
 
-[b]Requirements:[/b] Banished 1.0.7 (64-bit), Windows 10/11. Everybody in a game needs the same version of the mod - the game tells you if someone's differs.
+[b]Requirements:[/b] Banished 1.0.7 (64-bit), Steam or GOG version (Steam and GOG players can play together), Windows 10/11. Everybody in a game needs the same version of the mod - the game tells you if someone's differs.
 
 [size=4][b]Connecting[/b][/size]
 [list]
@@ -71,7 +71,7 @@ This .pkm holds the mod's windows and buttons. The multiplayer itself is a progr
 https://github.com/BarryBareth/banished-multiplayer
 Download the newest release zip there and run Install.bat (it installs both files). Without the DLL, the main menu shows a reminder.
 
-Needs Banished 1.0.7 (64-bit) and Windows 10/11. Everybody in a game needs the same version of the mod.
+Needs Banished 1.0.7 (64-bit, Steam or GOG - they can play together) and Windows 10/11. Everybody in a game needs the same version of the mod.
 
 CONNECTING
 - Steam: invite players through Steam; nobody's IP address is shared.
@@ -101,7 +101,7 @@ INSTALL
 3. Start Banished. The main menu now has a Multiplayer button.
 Uninstall: run Uninstall.bat.
 
-Needs Banished 1.0.7 (64-bit) and Windows 10/11. Everybody in a game needs the same version of the mod.
+Needs Banished 1.0.7 (64-bit, Steam or GOG - they can play together) and Windows 10/11. Everybody in a game needs the same version of the mod.
 
 CONNECTING
 - Steam: invite players through Steam; nobody's IP address is shared.

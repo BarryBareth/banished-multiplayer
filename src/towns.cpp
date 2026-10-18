@@ -63,7 +63,7 @@ struct NonSim {
     ~NonSim() { InterlockedDecrement(&g_visualStub); }
 };
 
-static uint8_t* GameLoop() { return *(uint8_t**)(g_exe + kRvaGameLoopGlobal); }
+static uint8_t* GameLoop() { return *(uint8_t**)(g_exe + Rva(kRvaGameLoopGlobal)); }
 
 int Count() { return g_count; }
 static void FocusCamera(int x, int y);
@@ -139,7 +139,7 @@ int OwnerOfObject(void* obj) {
     auto isEntity = [](void* p) {
         MEMORY_BASIC_INFORMATION mbi;
         if (!p || !VirtualQuery(p, &mbi, sizeof mbi) || mbi.State != MEM_COMMIT) return false;
-        return *(uintptr_t*)p == g_exe + kVtComponentEntity;
+        return *(uintptr_t*)p == g_exe + Rva(kVtComponentEntity);
     };
     if (isEntity(obj)) return OwnerOf(obj);
     void* e = *(void**)((uint8_t*)obj + 0x10);
@@ -183,7 +183,7 @@ static void* AllocNear(uintptr_t target, size_t size) {
 }
 
 static bool PatchBucketCall() {
-    uint8_t* site = (uint8_t*)(g_exe + kRvaBucketCall);
+    uint8_t* site = (uint8_t*)(g_exe + Rva(kRvaBucketCall));
     static const uint8_t expect[] = {0x48, 0x8b, 0x01, 0xff, 0x50, 0x48};  // mov rax,[rcx]; call [rax+48h]
     if (memcmp(site, expect, sizeof expect) != 0) { Log("!! towns: bucket call site has unexpected bytes"); return false; }
     uint8_t* thunk = (uint8_t*)AllocNear(g_exe, 64);
@@ -242,6 +242,45 @@ void PositionHashes(char* out, size_t n) {
 }
 
 bool g_copyZ;  // debug: CopyPositions reports z (in the x slot)
+// Debug (bmp_statedump.txt, see hooks.cpp): every villager's citizen object (Town+0xa0 entries) and the object at its
+// +0x278, as 32-bit words; pointers (differ per process) print as "p". tools/state_diff.py compares two dumps.
+void DumpCitizens(FILE* f, uint64_t tick) {
+    uint8_t* gl = GameLoop();
+    if (!gl || !f) return;
+    auto words = [&](const char* what, int t, int i, uint8_t* p, int size) {
+        if (!p) return;
+        uintptr_t vt = *(uintptr_t*)p;
+        fprintf(f, "%llu %d %d %s vt%llx", (unsigned long long)tick, t, i, what,
+                (unsigned long long)(vt > g_exe && vt < g_exe + 0x300000 ? SteamRva(vt - g_exe) : 0));
+        for (int o = 0; o < size; o += 4) {
+            uint64_t q = *(uint64_t*)(p + (o & ~7));
+            bool ptr = (q >> 32) >= 0x100 && (q >> 32) < 0x8000;  // a heap/module address in this process
+            if (ptr) fprintf(f, " p");
+            else fprintf(f, " %x", *(uint32_t*)(p + o));
+        }
+        fprintf(f, "\n");
+    };
+    int ntowns = g_towns.empty() ? 1 : (int)g_towns.size();
+    for (int t = 0; t < ntowns; t++) {
+        uint8_t* town = (uint8_t*)(g_towns.empty() ? *(void**)(gl + 0xf0) : g_towns[t]);
+        if (!town) continue;
+        void** list = *(void***)(town + 0xa0);
+        for (int i = 0; i < *(int*)(town + 0xa8) && list; i++) {
+            uint8_t* cit = (uint8_t*)list[i];
+            words("cit", t, i, cit, 0x2a0);
+            words("ent", t, i, cit ? *(uint8_t**)(cit + 0x278) : nullptr, 0x200);
+        }
+    }
+}
+
+void* CitizenAt(int t, int i) {
+    uint8_t* gl = GameLoop();
+    if (!gl) return nullptr;
+    uint8_t* town = (uint8_t*)(g_towns.empty() ? (t == 0 ? *(void**)(gl + 0xf0) : nullptr) : t < (int)g_towns.size() ? g_towns[t] : nullptr);
+    if (!town || i < 0 || i >= *(int*)(town + 0xa8)) return nullptr;
+    return (*(void***)(town + 0xa0))[i];
+}
+
 int CopyPositions(float* out, int maxVillagers) {
     uint8_t* gl = GameLoop();
     if (!gl) return 0;
@@ -364,7 +403,7 @@ static void RegisterStoredGoods() {
                 void* desc = *(void**)(rows + i * 0x10);
                 if (!desc) continue;
                 int before = *(int*)((uint8_t*)g_towns[t] + 0x118);
-                ((void(__fastcall*)(void*, void*))(g_exe + 0x97330))(g_towns[t], desc);
+                ((void(__fastcall*)(void*, void*))(g_exe + Rva(0x97330)))(g_towns[t], desc);
                 if (*(int*)((uint8_t*)g_towns[t] + 0x118) != before) {
                     NonSim ns;
                     Log("towns: town %d now knows %s (it reached a storage without a pile of it being made there)", t,
@@ -445,9 +484,9 @@ void StepTowns(void* origTown, const int64_t* dt, void (*step)(void*, const int6
 static void* CreateTown(bool sizeGrid = true) {
     uint8_t* gl = GameLoop();
     void* t = p_MemAlloc(0x1c0, 4);
-    ((void*(__fastcall*)(void*))(g_exe + kRvaTownCtor))(t);
+    ((void*(__fastcall*)(void*))(g_exe + Rva(kRvaTownCtor)))(t);
     int size = **(int**)(gl + 0xf8);
-    if (sizeGrid) ((void(__fastcall*)(void*, int))(g_exe + kRvaArrayResize))((uint8_t*)t + 0x140, (size >> 3) * (size >> 3));
+    if (sizeGrid) ((void(__fastcall*)(void*, int))(g_exe + Rva(kRvaArrayResize)))((uint8_t*)t + 0x140, (size >> 3) * (size >> 3));
     return t;
 }
 
@@ -482,7 +521,7 @@ static bool FindSite(void* mapgen, int t, int* outX, int* outY) {
                         if (dx * dx + dy * dy < minDist * minDist) farEnough = false;
                     }
                     if (!farEnough) continue;
-                    if (((SiteOk_t)(g_exe + kRvaSiteOk))(mapgen, x, y, r, r * r)) { *outX = x; *outY = y; return true; }
+                    if (((SiteOk_t)(g_exe + Rva(kRvaSiteOk)))(mapgen, x, y, r, r * r)) { *outX = x; *outY = y; return true; }
                 }
             }
         }
@@ -503,7 +542,7 @@ static void __fastcall h_StartStructures(void* mapgen, int x, int y) {
         g_sites[t].x = tx;
         g_sites[t].y = ty;
         g_sites[t].placed = true;
-        ((void(__fastcall*)(void*, float*, int, int))(g_exe + kRvaCellToWorld))(*(void**)(GameLoop() + 0xf8), g_sites[t].pos, tx, ty);
+        ((void(__fastcall*)(void*, float*, int, int))(g_exe + Rva(kRvaCellToWorld)))(*(void**)(GameLoop() + 0xf8), g_sites[t].pos, tx, ty);
         Log("towns: town %d starts at cell %d,%d (town 0 at %d,%d)", t, tx, ty, x, y);
         Scope s(t);
         o_StartStructures(mapgen, tx, ty);
@@ -595,13 +634,13 @@ static void __fastcall h_ZoneShutdown(uint8_t* comp) {
     }
     // listed nowhere: do the cell part only (the list erase would crash)
     uint8_t* map = nullptr;
-    ((void(__fastcall*)(void*, uint8_t**))(g_exe + 0x4680))(entity, &map);  // the entity's MapComponent
+    ((void(__fastcall*)(void*, uint8_t**))(g_exe + Rva(0x4680)))(entity, &map);  // the entity's MapComponent
     Log("!! towns: zone %s (owner %d, town %d) is in no town's zone list - cleared its cells only",
         commands::DescPath(*(void**)(entity + 0x18)).c_str(), OwnerOf(entity), cur);
     if (!map) return;
     void* desc = *(void**)(map + 0x18);
     void* none = nullptr;
-    ((void(__fastcall*)(void*, void**, int, int, int, int, void*, uint32_t))(g_exe + 0xa2830))(
+    ((void(__fastcall*)(void*, void**, int, int, int, int, void*, uint32_t))(g_exe + Rva(0xa2830)))(
         *(void**)(GameLoop() + 0xf8), &none, *(short*)(map + 0x28), *(short*)(map + 0x2a), *(short*)(map + 0x2c),
         *(short*)(map + 0x2e), (uint8_t*)desc + 0x28, *(uint32_t*)(map + 0x30));
 }
@@ -627,7 +666,7 @@ static void __fastcall h_StartSupplies(void* mapgen) {
         if (!g_sites[t].placed) continue;
         // the supplies are spread over the town's known resource kinds (Town+0x110), filled for town 0 just before
         for (int i = 0; i < *(int*)(t0 + 0x118); i++)
-            ((void(__fastcall*)(void*, void*))(g_exe + kRvaTownAddResource))(g_towns[t], (*(void***)(t0 + 0x110))[i]);
+            ((void(__fastcall*)(void*, void*))(g_exe + Rva(kRvaTownAddResource)))(g_towns[t], (*(void***)(t0 + 0x110))[i]);
         Scope s(t);
         o_StartSupplies(mapgen);
     }
@@ -642,9 +681,9 @@ static void* __fastcall h_StartAll(void* mapgen, float* out) {
     uint8_t* t0 = (uint8_t*)g_towns[0];
     for (int t = 1; t < (int)g_towns.size(); t++) {
         for (int i = 0; i < *(int*)(t0 + 0x118); i++)
-            ((void(__fastcall*)(void*, void*))(g_exe + kRvaTownAddResource))(g_towns[t], (*(void***)(t0 + 0x110))[i]);
+            ((void(__fastcall*)(void*, void*))(g_exe + Rva(kRvaTownAddResource)))(g_towns[t], (*(void***)(t0 + 0x110))[i]);
         for (int i = 0; i < *(int*)(t0 + 0x128); i++)
-            ((void(__fastcall*)(void*, void*))(g_exe + kRvaTownAddTemplate))(g_towns[t], (*(void***)(t0 + 0x120))[i]);
+            ((void(__fastcall*)(void*, void*))(g_exe + Rva(kRvaTownAddTemplate)))(g_towns[t], (*(void***)(t0 + 0x120))[i]);
     }
     return r;
 }
@@ -659,7 +698,7 @@ static const uintptr_t kRvaEntityKill = 0xc8370;
 static const uintptr_t kRvaArrayAppend = 0x3110;         // (array*, newCount, InternalBasePtr* value)
 
 static void* FindComponent(uint8_t* entity, uintptr_t typeinfoRva) {
-    int want = *(int*)(g_exe + typeinfoRva), n = *(int*)(entity + 0x38);
+    int want = *(int*)(g_exe + Rva(typeinfoRva)), n = *(int*)(entity + 0x38);
     for (int i = 0; i < n; i++) {
         void* comp = (*(void***)(entity + 0x30))[i];
         if (((int(__fastcall*)(void*))(*(void***)comp)[2])(comp) == want) return comp;
@@ -732,7 +771,7 @@ static std::vector<uint8_t*> StoragesOf(int t) {
 // MarketComponent (vtable exe+0x15fd60), in entity-manager order (deterministic), cached per sim step.
 static bool IsMarket(uint8_t* e) {
     for (int c = 0; c < *(int*)(e + 0x38); c++)
-        if ((uintptr_t)*(void**)(*(uint8_t***)(e + 0x30))[c] - g_exe == 0x15fd60) return true;
+        if ((uintptr_t)*(void**)(*(uint8_t***)(e + 0x30))[c] == g_exe + Rva(0x15fd60)) return true;
     return false;
 }
 static std::vector<uint8_t*> MarketsOf(int t) {
@@ -778,7 +817,7 @@ void DebugStorages() {
     };
     auto isMarket = [&](uint8_t* e) {
         for (int c = 0; c < *(int*)(e + 0x38); c++)
-            if ((uintptr_t)*(void**)(*(uint8_t***)(e + 0x30))[c] - g_exe == 0x15fd60) return true;
+            if ((uintptr_t)*(void**)(*(uint8_t***)(e + 0x30))[c] == g_exe + Rva(0x15fd60)) return true;
         return false;
     };
     for (int t = 0; t < (int)g_towns.size(); t++) {
@@ -829,7 +868,7 @@ static int RoomFor(int t, void* desc) {  // how many more of desc fit into t's s
         int lo = 0, hi = 100000;  // binary search the largest n the game's own check accepts
         while (lo < hi) {
             int mid = (lo + hi + 1) / 2;
-            if (((bool(__fastcall*)(void*, void*, int))(g_exe + kRvaStorageRoom))(s, desc, mid)) lo = mid; else hi = mid - 1;
+            if (((bool(__fastcall*)(void*, void*, int))(g_exe + Rva(kRvaStorageRoom)))(s, desc, mid)) lo = mid; else hi = mid - 1;
         }
         total += lo;
     }
@@ -844,15 +883,15 @@ static void Move(int from, int to, void* desc, int n) {
         for (int i = 0; i < m; i++)
             if (*(void**)(*(uint8_t**)(s + 0x28) + i * 0x10) == desc) have = *(int*)(*(uint8_t**)(s + 0x28) + i * 0x10 + 8);
         int take = have < left ? have : left;
-        if (take > 0) ((void(__fastcall*)(void*, void*, int))(g_exe + kRvaStorageRemove))(s, desc, take);
+        if (take > 0) ((void(__fastcall*)(void*, void*, int))(g_exe + Rva(kRvaStorageRemove)))(s, desc, take);
         left -= take;
     }
     left = n;
     for (uint8_t* s : StoragesOf(to)) {
-        while (left > 0 && ((bool(__fastcall*)(void*, void*, int))(g_exe + kRvaStorageRoom))(s, desc, 1)) {
+        while (left > 0 && ((bool(__fastcall*)(void*, void*, int))(g_exe + Rva(kRvaStorageRoom)))(s, desc, 1)) {
             int chunk = left;
-            while (chunk > 1 && !((bool(__fastcall*)(void*, void*, int))(g_exe + kRvaStorageRoom))(s, desc, chunk)) chunk /= 2;
-            ((void(__fastcall*)(void*, void*, int))(g_exe + kRvaStorageAdd))(s, desc, chunk);
+            while (chunk > 1 && !((bool(__fastcall*)(void*, void*, int))(g_exe + Rva(kRvaStorageRoom)))(s, desc, chunk)) chunk /= 2;
+            ((void(__fastcall*)(void*, void*, int))(g_exe + Rva(kRvaStorageAdd)))(s, desc, chunk);
             left -= chunk;
         }
     }
@@ -1011,12 +1050,12 @@ static bool InWorkMap(int t, void* e, void* key) {
 static void WorkMapAdd(int t, void* e) {
     void* key = WorkKey(e);
     if (!key || t < 0 || t >= (int)g_towns.size() || InWorkMap(t, e, key)) return;
-    ((void(__fastcall*)(void*, void**, void*))(g_exe + kRvaWorkMapAdd))(g_towns[t], &e, key);
+    ((void(__fastcall*)(void*, void**, void*))(g_exe + Rva(kRvaWorkMapAdd)))(g_towns[t], &e, key);
 }
 static void WorkMapRemove(int t, void* e) {
     void* key = WorkKey(e);
     if (!key || t < 0 || t >= (int)g_towns.size() || !InWorkMap(t, e, key)) return;
-    ((void(__fastcall*)(void*, void**, void*))(g_exe + kRvaWorkMapRemove))(g_towns[t], &e, key);
+    ((void(__fastcall*)(void*, void**, void*))(g_exe + Rva(kRvaWorkMapRemove)))(g_towns[t], &e, key);
 }
 // town t's villagers working at building e go back to being laborers (what the game does when a workplace goes away)
 static void ReleaseWorkers(int t, void* e) {
@@ -1027,7 +1066,7 @@ static void ReleaseWorkers(int t, void* e) {
         uint8_t* cit = (*(uint8_t***)(town + 0xa0))[i];
         if (!cit || *(void**)(cit + 0x248) != e) continue;
         void* none = nullptr;
-        ((void(__fastcall*)(void*, void**))(g_exe + kRvaSetWorkplace))(cit, &none);
+        ((void(__fastcall*)(void*, void**))(g_exe + Rva(kRvaSetWorkplace)))(cit, &none);
         *(void**)(cit + 0x1f0) = laborer;
         released++;
     }
@@ -1049,7 +1088,7 @@ bool WorkSharedWith(void* e, int town) { return town >= 0 && town < 8 && (WorkSh
 bool IsOwnWorkplace(void* e) {  // e may be anything a window controller points at: entity check first (vtable)
     if (g_towns.size() < 2 || !e) return false;
     MEMORY_BASIC_INFORMATION mbi;
-    if (!VirtualQuery(e, &mbi, sizeof mbi) || mbi.State != MEM_COMMIT || *(uintptr_t*)e != g_exe + kVtComponentEntity)
+    if (!VirtualQuery(e, &mbi, sizeof mbi) || mbi.State != MEM_COMMIT || *(uintptr_t*)e != g_exe + Rva(kVtComponentEntity))
         return false;
     return OwnerOf(e) == g_local && WorkKey(e) != nullptr;
 }
@@ -1152,7 +1191,7 @@ static void* RebalancePickNode(uint8_t* root) {
 }
 static bool PatchRebalancePick() {
     if (GetFileAttributesW(L"bmp_norebalancefix.txt") != INVALID_FILE_ATTRIBUTES) return false;  // test: game's order
-    uint8_t* at = (uint8_t*)(g_exe + 0xdb290);
+    uint8_t* at = (uint8_t*)(g_exe + Rva(0xdb290));
     static const uint8_t expect[] = {0x48, 0x8B, 0x7C, 0x24, 0x40, 0x48, 0x85, 0xFF, 0x74, 0x14};  // mov rdi,[rsp+40h]; test; jz
     if (memcmp(at, expect, sizeof expect) != 0) return false;
     uint8_t* stub = (uint8_t*)VirtualAlloc(nullptr, 4096, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
@@ -1169,7 +1208,7 @@ static bool PatchRebalancePick() {
     emit({0x48, 0x83, 0xC4, 0x28});                         // add rsp, 28h
     emit({0x48, 0x89, 0xC7});                               // mov rdi, rax
     emit({0x41, 0x5B, 0x41, 0x5A, 0x41, 0x59, 0x41, 0x58, 0x5A, 0x59, 0x58});  // pop r11..rax
-    emit({0xFF, 0x25, 0, 0, 0, 0}); emit64(g_exe + 0xdb2ae);  // jmp [rip] -> back after the leftmost walk
+    emit({0xFF, 0x25, 0, 0, 0, 0}); emit64(g_exe + Rva(0xdb2ae));  // jmp [rip] -> back after the leftmost walk
     FlushInstructionCache(GetCurrentProcess(), stub, p - stub);
     DWORD old;
     if (!VirtualProtect(at, 30, PAGE_EXECUTE_READWRITE, &old)) return false;
@@ -1314,7 +1353,7 @@ static void* RawDesc(void* desc);
 static bool Reachable(int cell, int t) {
     if (t < 0 || t >= (int)g_sites.size() || !g_sites[t].placed) return false;
     int* map = *(int**)(GameLoop() + 0xf8);
-    return ((bool(__fastcall*)(void*, int, int, int))(g_exe + 0xa55c0))(map, 0xe1f, cell, g_sites[t].y * *map + g_sites[t].x);
+    return ((bool(__fastcall*)(void*, int, int, int))(g_exe + Rva(0xa55c0)))(map, 0xe1f, cell, g_sites[t].y * *map + g_sites[t].x);
 }
 
 // Roads are not entities: the road tool marks map cells (exe+0xa1e30(map, cell, type, ...)), which registers a
@@ -1355,7 +1394,7 @@ static int __fastcall h_BuildRoadTry(uint8_t* work, void** citizen, void* a, voi
 static int WorkOwner(uint8_t* work) {  // -1 = anyone may take it
     void* ent = *(void**)(work + 0x10);
     if (ent) return OwnerOf(ent);
-    if (*(uintptr_t*)work == g_exe + kVtBuildRoad) {
+    if (*(uintptr_t*)work == g_exe + Rva(kVtBuildRoad)) {
         auto it = g_roadOwner.find(*(int*)(work + 0x58));
         if (it != g_roadOwner.end()) return it->second;
     }
@@ -1429,7 +1468,7 @@ static bool __fastcall h_TryWorks(uint8_t* mgr, void** citizen, uint8_t** tree) 
             g_tryDest = prevDest;
             // desync record: "job offer" - tag J + work type (vtable rva), value = work's entity (sim-heap offset),
             // a = the citizen's entity (offset), b = result (2 taken, 1 not now, 0 no)
-            ProbeNote(0x4a000000u | (uint32_t)(((uintptr_t)vt - g_exe) & 0xffffff),
+            ProbeNote(0x4a000000u | (uint32_t)(SteamRva((uintptr_t)vt - g_exe) & 0xffffff),
                       simheap::Contains(ent) ? simheap::Offset(ent) : 0xffffffffu,
                       (int32_t)(simheap::Contains(*(void**)(cit + 0x10)) ? simheap::Offset(*(void**)(cit + 0x10)) : -1), r);
             if (r == 2) return true;
@@ -1473,7 +1512,7 @@ static void __fastcall h_StoreInventory(uint8_t* cit) {
     auto it = g_courier.find((uintptr_t)ent);
     if (it != g_courier.end()) {
         uint8_t* inv = (uint8_t*)FindComponent((uint8_t*)ent, kTiStorage);
-        if (!inv || ((int(__fastcall*)(void*))(g_exe + kRvaStorageUsed))(inv) == 0) g_courier.erase(it);  // delivered
+        if (!inv || ((int(__fastcall*)(void*))(g_exe + Rva(kRvaStorageUsed)))(inv) == 0) g_courier.erase(it);  // delivered
     }
     it = g_courier.find((uintptr_t)ent);
     int dest = it == g_courier.end() ? -1 : it->second;
@@ -1562,14 +1601,14 @@ using PickupTaken_t = bool(__fastcall*)(uint8_t* work);
 static PickupTaken_t o_PickupTaken;
 static bool __fastcall h_PickupTaken(uint8_t* work) {
     if (o_PickupTaken(work)) return true;
-    if (g_tryOwner < 0 || *(uintptr_t*)work != g_exe + kVtPickup) return false;
+    if (g_tryOwner < 0 || *(uintptr_t*)work != g_exe + Rva(kVtPickup)) return false;
     void* ent = *(void**)(work + 0x10);
     if (!ent) return false;
     return OwnerOf(ent) != g_tryOwner || DeliveryDest(ent) != g_tryDest;
 }
 
 static void* RawDesc(void* desc) {  // the RawMaterialDescription part of a resource description
-    int want = *(int*)(g_exe + kTiRawMaterialDesc), n = *(int*)((uint8_t*)desc + 0x30);
+    int want = *(int*)(g_exe + Rva(kTiRawMaterialDesc)), n = *(int*)((uint8_t*)desc + 0x30);
     for (int i = 0; i < n; i++) {
         void* d = (*(void***)((uint8_t*)desc + 0x28))[i];
         if (((int(__fastcall*)(void*))(*(void***)d)[2])(d) == want) return d;
@@ -1603,22 +1642,22 @@ static int SpawnDeliveryPiles(int from, int to, void* desc, int n, uint8_t* stor
                 if (*(void**)c || *(void**)(c + 8) || c[0x29] != 2) continue;
                 float v[4] = {(float)x - half, (float)y - half, 0, 0}, t1[4], t2[4];
                 using Terrain_t = float*(__fastcall*)(void*, float*, float*, char, void*);
-                ((Terrain_t)(g_exe + kRvaTerrainPoint))(map, t1, v, 0, nullptr);
-                float* h = ((Terrain_t)(g_exe + kRvaTerrainPoint))(map, t2, t1, 0, nullptr);
-                if (!(h[2] >= 0.f && h[2] < *(float*)(g_exe + 0x1787fc))) continue;
+                ((Terrain_t)(g_exe + Rva(kRvaTerrainPoint)))(map, t1, v, 0, nullptr);
+                float* h = ((Terrain_t)(g_exe + Rva(kRvaTerrainPoint)))(map, t2, t1, 0, nullptr);
+                if (!(h[2] >= 0.f && h[2] < *(float*)(g_exe + Rva(0x1787fc)))) continue;
                 int k = n - placed < per ? n - placed : per;
                 // the entity must live in the sim heap like every sim object (its address orders entity sets and
                 // pointer-keyed trees); the engine's MemAlloc only routes calls from the exe there, not from us
                 void* mem = simheap::Alloc(0x48, 8);
                 if (!mem) mem = p_MemAlloc(0x48, 8);
-                uint8_t* e = mem ? ((uint8_t*(__fastcall*)(void*, void*))(g_exe + kRvaEntityCreate))(mem, desc) : nullptr;
+                uint8_t* e = mem ? ((uint8_t*(__fastcall*)(void*, void*))(g_exe + Rva(kRvaEntityCreate)))(mem, desc) : nullptr;
                 uint8_t* comp = e ? (uint8_t*)FindComponent(e, kTiRawMaterialComp) : nullptr;
                 if (!comp) { Log("!! towns: delivery pile creation failed"); return placed; }
-                ((void(__fastcall*)(void*, int, float))(g_exe + kRvaPilePlace))(comp, idx, 0.f);
+                ((void(__fastcall*)(void*, int, float))(g_exe + Rva(kRvaPilePlace)))(comp, idx, 0.f);
                 *(int*)(comp + 0x28) = k;
                 *(uint64_t*)(comp + 0x30) = 0;
                 void* ref = e;
-                ((void(__fastcall*)(void*, void*, int))(g_exe + kRvaAddEntity))(*(void**)(gl + 0xe8), &ref, *(int*)((uint8_t*)desc + 0x20));
+                ((void(__fastcall*)(void*, void*, int))(g_exe + Rva(kRvaAddEntity)))(*(void**)(gl + 0xe8), &ref, *(int*)((uint8_t*)desc + 0x20));
                 g_deliverTo[(uintptr_t)e] = (uint8_t)to;
                 placed += k;
             }
@@ -1640,9 +1679,9 @@ static void Deliver(int from, int to, void* desc, int n) {
             }
             int take = have < left ? have : left;
             if (take <= 0) continue;
-            ((void(__fastcall*)(void*, void*, int))(g_exe + kRvaStorageRemove))(s, desc, take);
+            ((void(__fastcall*)(void*, void*, int))(g_exe + Rva(kRvaStorageRemove)))(s, desc, take);
             int placed = SpawnDeliveryPiles(from, to, desc, take, *(uint8_t**)(s + 0x10));
-            if (placed < take) ((void(__fastcall*)(void*, void*, int))(g_exe + kRvaStorageAdd))(s, desc, take - placed);
+            if (placed < take) ((void(__fastcall*)(void*, void*, int))(g_exe + Rva(kRvaStorageAdd)))(s, desc, take - placed);
             left -= placed;
             piles += placed;
         }
@@ -1671,18 +1710,18 @@ void DeliverNow(int from) {
         void* desc = *(void**)(e + 0x28);
         int to = g_deliverTo[(uintptr_t)e], left = comp ? *(int*)(comp + 0x28) : 0;
         for (uint8_t* s : StoragesOf(to)) {
-            while (left > 0 && ((bool(__fastcall*)(void*, void*, int))(g_exe + kRvaStorageRoom))(s, desc, 1)) {
+            while (left > 0 && ((bool(__fastcall*)(void*, void*, int))(g_exe + Rva(kRvaStorageRoom)))(s, desc, 1)) {
                 int chunk = left;
-                while (chunk > 1 && !((bool(__fastcall*)(void*, void*, int))(g_exe + kRvaStorageRoom))(s, desc, chunk)) chunk /= 2;
-                ((void(__fastcall*)(void*, void*, int))(g_exe + kRvaStorageAdd))(s, desc, chunk);
+                while (chunk > 1 && !((bool(__fastcall*)(void*, void*, int))(g_exe + Rva(kRvaStorageRoom)))(s, desc, chunk)) chunk /= 2;
+                ((void(__fastcall*)(void*, void*, int))(g_exe + Rva(kRvaStorageAdd)))(s, desc, chunk);
                 left -= chunk;
                 moved += chunk;
             }
         }
         if (left > 0) { *(int*)(comp + 0x28) = left; continue; }  // no room: the rest keeps waiting
-        ((void(__fastcall*)(void*))(g_exe + kRvaEntityKill))(e);
+        ((void(__fastcall*)(void*))(g_exe + Rva(kRvaEntityKill)))(e);
         void* ref = e;
-        ((void(__fastcall*)(void*, int, void*))(g_exe + kRvaArrayAppend))(mgr + 0xd0, *(int*)(mgr + 0xd8) + 1, &ref);
+        ((void(__fastcall*)(void*, int, void*))(g_exe + Rva(kRvaArrayAppend)))(mgr + 0xd0, *(int*)(mgr + 0xd8) + 1, &ref);
     }
     Log("towns: town %d handed over %d waiting delivery goods directly", from, moved);
 }
@@ -1716,7 +1755,7 @@ void OtherTownFootprints(std::vector<Footprint>& out) {
         } else {
             float in[4] = {(f.x0 + f.x1) * 0.5f, (f.y0 + f.y1) * 0.5f, 0, 0}, o[4] = {};
             using Terrain_t = float*(__fastcall*)(void*, float*, float*, char, void*);
-            float* t = ((Terrain_t)(g_exe + 0xa48b0))(map, o, in, 0, nullptr);
+            float* t = ((Terrain_t)(g_exe + Rva(0xa48b0)))(map, o, in, 0, nullptr);
             f.z = t ? t[2] : 0.f;
         }
         out.push_back(f);
@@ -1930,26 +1969,26 @@ bool Settle(int t, int x, int y) {
     uint8_t* mgr = *(uint8_t**)(gl + 0xe8);
     int cleared = 0;
     for (auto& [e, c] : NaturalsNear(x, y, r + 2)) {  // clear the site (trees, rocks)
-        ((void(__fastcall*)(void*))(g_exe + kRvaEntityKill))(e);
+        ((void(__fastcall*)(void*))(g_exe + Rva(kRvaEntityKill)))(e);
         void* ref = e;
-        ((void(__fastcall*)(void*, int, void*))(g_exe + kRvaArrayAppend))(mgr + 0xd0, *(int*)(mgr + 0xd8) + 1, &ref);
+        ((void(__fastcall*)(void*, int, void*))(g_exe + Rva(kRvaArrayAppend)))(mgr + 0xd0, *(int*)(mgr + 0xd8) + 1, &ref);
         cleared++;
     }
-    if (!((SiteOk_t)(g_exe + kRvaSiteOk))(mapgen, x, y, r, r * r))
+    if (!((SiteOk_t)(g_exe + Rva(kRvaSiteOk)))(mapgen, x, y, r, r * r))
         Log("!! towns: town %d site %d,%d still not fully open after clearing %d objects - placing anyway", t, x, y, cleared);
     Scope s(t);
     g_sites[t].x = x;
     g_sites[t].y = y;
     g_sites[t].placed = true;
-    ((void(__fastcall*)(void*, float*, int, int))(g_exe + kRvaCellToWorld))(*(void**)(gl + 0xf8), g_sites[t].pos, x, y);
+    ((void(__fastcall*)(void*, float*, int, int))(g_exe + Rva(kRvaCellToWorld)))(*(void**)(gl + 0xf8), g_sites[t].pos, x, y);
     uint8_t* t0 = (uint8_t*)g_towns[0];
     o_StartStructures(mapgen, x, y);
     o_StartFamilies(mapgen, g_sites[t].pos);
     for (int i = 0; i < *(int*)(t0 + 0x118); i++)
-        ((void(__fastcall*)(void*, void*))(g_exe + kRvaTownAddResource))(g_towns[t], (*(void***)(t0 + 0x110))[i]);
+        ((void(__fastcall*)(void*, void*))(g_exe + Rva(kRvaTownAddResource)))(g_towns[t], (*(void***)(t0 + 0x110))[i]);
     o_StartSupplies(mapgen);
     for (int i = 0; i < *(int*)(t0 + 0x128); i++)
-        ((void(__fastcall*)(void*, void*))(g_exe + kRvaTownAddTemplate))(g_towns[t], (*(void***)(t0 + 0x120))[i]);
+        ((void(__fastcall*)(void*, void*))(g_exe + Rva(kRvaTownAddTemplate)))(g_towns[t], (*(void***)(t0 + 0x120))[i]);
     Log("towns: town %d settled at cell %d,%d (cleared %d trees/rocks)", t, x, y, cleared);
     if (t == g_local) FocusCamera(x, y);  // UI-only: fly to the new town
     return true;
@@ -2389,7 +2428,7 @@ static void __fastcall h_EntityPostLoad(uint8_t* mgr, uint8_t* stream) {
                 uint8_t* mc = (uint8_t*)FindComponent((*(uint8_t***)t0)[i], kTiMapComponent);
                 if (!mc) continue;
                 g_sites[0] = Site{*(int16_t*)(mc + 0x28), *(int16_t*)(mc + 0x2a), {}, true};
-                ((void(__fastcall*)(void*, float*, int, int))(g_exe + kRvaCellToWorld))(*(void**)(GameLoop() + 0xf8), g_sites[0].pos,
+                ((void(__fastcall*)(void*, float*, int, int))(g_exe + Rva(kRvaCellToWorld)))(*(void**)(GameLoop() + 0xf8), g_sites[0].pos,
                                                                                           g_sites[0].x, g_sites[0].y);
             }
             Log("towns: one-town save in a %d-town session: town 0 at %d,%d, the others settle", g_count, g_sites[0].x, g_sites[0].y);
@@ -2409,12 +2448,12 @@ static void __fastcall h_EntityPostLoad(uint8_t* mgr, uint8_t* stream) {
         *(uint8_t**)(e + 0x10) = mgr;
         void* ref = e;
         uint32_t flags = *(uint32_t*)(e + 0x40);
-        if (flags & 4) ((void(__fastcall*)(void*, int, void*))(g_exe + kRvaArrayAppend))(mgr + 0x88, *(int*)(mgr + 0x90) + 1, &ref);
-        if (flags & 0x10) ((void(__fastcall*)(void*, int, void*))(g_exe + kRvaArrayAppend))(mgr + 0x98, *(int*)(mgr + 0xa0) + 1, &ref);
+        if (flags & 4) ((void(__fastcall*)(void*, int, void*))(g_exe + Rva(kRvaArrayAppend)))(mgr + 0x88, *(int*)(mgr + 0x90) + 1, &ref);
+        if (flags & 0x10) ((void(__fastcall*)(void*, int, void*))(g_exe + Rva(kRvaArrayAppend)))(mgr + 0x98, *(int*)(mgr + 0xa0) + 1, &ref);
     }
     for (int t = 1; t < (int)g_towns.size(); t++) {  // town 0's runs right after this, from the GameLoop
         Scope sc(t);
-        ((TownPostLoad_t)(g_exe + kRvaTownPostLoad))(g_towns[t]);
+        ((TownPostLoad_t)(g_exe + Rva(kRvaTownPostLoad)))(g_towns[t]);
     }
 }
 
@@ -2443,7 +2482,7 @@ static void __fastcall StorageControlSet(uint8_t* comp, int id) {  // simulation
         if (t != owner) ShareStorage(owner, e, t, on);
 }
 static void PatchStorageControl() {
-    uintptr_t* vt = (uintptr_t*)(g_exe + kVtStorageComponent);
+    uintptr_t* vt = (uintptr_t*)(g_exe + Rva(kVtStorageComponent));
     DWORD old = 0;
     if (!VirtualProtect(vt + 13, 16, PAGE_READWRITE, &old)) { Log("!! towns: storage share control: no vtable access"); return; }
     o_StorageControlGet = (ControlGet_t)vt[13];
@@ -2487,7 +2526,7 @@ void Install() {
         {0x68590, (void*)h_NotifyUpdate, (void**)&o_NotifyUpdate, "NotifyUpdate"},
     };
     for (auto& h : hooks) {
-        void* target = (void*)(g_exe + h.rva);
+        void* target = (void*)(g_exe + Rva(h.rva));
         MH_STATUS s = MH_CreateHook(target, h.fn, h.orig);
         if (s == MH_OK) s = MH_EnableHook(target);
         Log("towns: hook %s -> %s", h.name, MH_StatusToString(s));

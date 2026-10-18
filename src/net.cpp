@@ -105,7 +105,7 @@ static SOCKET g_listenSock = INVALID_SOCKET; // host: direct TCP listener
 
 // Every player must run the identical DLL - any code difference can desync. The build id = release number + a hash of
 // this DLL's code section as stored on disk (in memory it is relocated); HELLO carries it, the host turns away others.
-static constexpr const char* kModVersion = "0.9.1";
+static constexpr const char* kModVersion = "0.9.2";
 static std::string g_fakeVersion;
 static int64_t g_testDropAt = -1;
 static bool g_testCorruptSave;  // bmp_net.txt corruptsave=1 (test): the first save received counts as corrupt
@@ -1898,6 +1898,7 @@ static std::wstring SettingsPath() {
 static void LoadSettings() {
     FILE* f = nullptr;
     _wfopen_s(&f, SettingsPath().c_str(), L"r");
+    if (!gamebuild::HasSteam()) g_method = kViaRelay;  // GOG: no Steam
     if (!f) return;
     char line[512];
     while (fgets(line, sizeof line, f)) {
@@ -1911,6 +1912,7 @@ static void LoadSettings() {
         else if (k == "latency") g_latencyMs = std::clamp(atoi(v.c_str()), 30, 1000);
     }
     fclose(f);
+    if (g_method == kViaSteam && !gamebuild::HasSteam()) g_method = kViaRelay;  // GOG: no Steam
 }
 
 Settings GetSettings() { return Settings{g_method, g_hostPort, g_relayAddr, g_playerName}; }

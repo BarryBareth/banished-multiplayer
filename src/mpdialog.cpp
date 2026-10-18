@@ -272,7 +272,10 @@ static void Refresh() {
         gameui::SetChecked(E("bmpConnSteam"), g_set.method == 0);
         gameui::SetChecked(E("bmpConnDirect"), g_set.method == 1);
         gameui::SetChecked(E("bmpConnRelay"), g_set.method == 2);
-        Text("bmpConnHint", g_set.method == 0 ? (u.steamOk ? "Other players join through Steam invites." : "Steam is not running.")
+        gameui::Enable(E("bmpConnSteam"), gamebuild::HasSteam());  // GOG: no Steam
+        Text("bmpConnHint", !gamebuild::HasSteam() && g_set.method != 1
+                                ? "Everybody uses the same relay server. (This copy of Banished has no Steam: Relay or Direct.)"
+                            : g_set.method == 0 ? (u.steamOk ? "Other players join through Steam invites." : "Steam is not running.")
                             : g_set.method == 1 ? "The host must forward this TCP port on their router to their PC."
                                                 : "Everybody uses the same relay server.");
         return;
@@ -317,7 +320,7 @@ static void OnClick(int id) {
     case kSourceNew: g_source = 0; break;
     case kSourceSave: g_source = 1; break;
     case kPick: g_pick = !g_pick; break;
-    case kConnSteam: g_set.method = 0; net::SetSettings(g_set); break;
+    case kConnSteam: if (gamebuild::HasSteam()) { g_set.method = 0; net::SetSettings(g_set); } break;
     case kConnDirect: g_set.method = 1; net::SetSettings(g_set); break;
     case kConnRelay: g_set.method = 2; net::SetSettings(g_set); break;
     case kHost:

@@ -91,10 +91,10 @@ bool BeginAutoSave() {
     // Same setup as the game's autosave (exe+0x5e820). The thumbnail sprite is required: SaveLoad::Draw renders
     // the save thumbnail with it (without it: access violation in d3d11).
     uintptr_t exe = (uintptr_t)GetModuleHandleW(nullptr);
-    uint8_t* gameUi = *(uint8_t**)(exe + kRvaGameUiGlobal);
+    uint8_t* gameUi = *(uint8_t**)(exe + Rva(kRvaGameUiGlobal));
     if (!gameUi) return false;
     int64_t minTime = 0;
-    p_TimeFromSeconds(&minTime, *(float*)(exe + kRvaSaveMinSeconds));
+    p_TimeFromSeconds(&minTime, *(float*)(exe + Rva(kRvaSaveMinSeconds)));
     p_SetMinOpTime(sl, &minTime);
     uint32_t sprite[4];
     memcpy(sprite, gameUi + 0xb8, sizeof sprite);
@@ -115,7 +115,7 @@ bool SaveBusy() { return g_saving; }
 bool InMenu() {
     void* ml = p_MainLoopGet ? p_MainLoopGet() : nullptr;
     void* cur = ml ? p_GetCurrentLoop(ml) : nullptr;
-    return cur && *(uintptr_t*)cur == (uintptr_t)GetModuleHandleW(nullptr) + kVtMenuLoop && p_SaveLoadGet && p_SaveLoadGet();
+    return cur && *(uintptr_t*)cur == (uintptr_t)GetModuleHandleW(nullptr) + Rva(kVtMenuLoop) && p_SaveLoadGet && p_SaveLoadGet();
 }
 
 static void SetState(State s) { g_state = s; g_frames = 0; Log("gameload: state %d", s); }
@@ -196,11 +196,11 @@ State Frame() {
             void* gl = p_MemAlloc(0x160, 8);
             void* noAchievement = nullptr;
             char* emptyName = nullptr;
-            ((GameLoopCtor_t)(exe + kRvaGameLoopCtor))(gl, state, &noAchievement, -1, &emptyName, 0, 0, true, 0, 0, 0);
+            ((GameLoopCtor_t)(exe + Rva(kRvaGameLoopCtor)))(gl, state, &noAchievement, -1, &emptyName, 0, 0, true, 0, 0, 0);
             void* loader = p_MemAlloc(0x48, 4);
             int64_t zero = 0;
             p_LoaderLoopCtor(loader, gl, &zero);
-            *(uintptr_t*)loader = exe + kVtLoaderLoop;
+            *(uintptr_t*)loader = exe + Rva(kVtLoaderLoop);
             p_SetNextLoop(ml, loader);
             SetState(kStarting);
         } else if (g_frames > 1800) Fail("load timed out");
@@ -219,7 +219,7 @@ bool RequestNewGame(uint32_t seed, int mapSize, int startIdx, int terrainIdx, in
     Init();
     if (!InMenu() || (g_state != kIdle && g_state != kDone && g_state != kFailed)) return false;
     uintptr_t exe = (uintptr_t)GetModuleHandleW(nullptr);
-    uint8_t* lists = *(uint8_t**)(exe + kRvaGameUiGlobal);  // DAT_1401cbde8: +0x18 start conditions, +0x20 terrain, +0x10 climate
+    uint8_t* lists = *(uint8_t**)(exe + Rva(kRvaGameUiGlobal));  // DAT_1401cbde8: +0x18 start conditions, +0x20 terrain, +0x10 climate
     auto item = [&](int off, int i) -> void* {
         uint8_t* list = lists ? *(uint8_t**)(lists + off) : nullptr;
         return list ? (*(void***)(list + 0x20))[i] : nullptr;
@@ -240,7 +240,7 @@ bool RequestNewGame(uint32_t seed, int mapSize, int startIdx, int terrainIdx, in
     void* noAchievement = nullptr;
     using NewGame_t = void(__fastcall*)(void* owner, void* name, int seed, int mapSize, bool disasters, void* mapGen,
                                         void* terrain, void* climate, int achievementIdx, void** achievement);
-    ((NewGame_t)(exe + kRvaNewGame))(owner, &name, (int)seed, mapSize, disasters, mapGen, terrain, climate, -1, &noAchievement);
+    ((NewGame_t)(exe + Rva(kRvaNewGame)))(owner, &name, (int)seed, mapSize, disasters, mapGen, terrain, climate, -1, &noAchievement);
     p_StringDtor(&name);
     Log("gameload: new game seed=%u size=%d start=%d terrain=%d climate=%d disasters=%d", seed, mapSize, startIdx,
         terrainIdx, climateIdx, disasters);
@@ -259,7 +259,7 @@ bool RequestMainMenu() {
     alignas(16) static uint8_t owner[0xd0];
     memset(owner, 0, sizeof owner);
     *(void**)(owner + 0xb8) = gl;
-    ((void(__fastcall*)(void*))((uintptr_t)GetModuleHandleW(nullptr) + kRvaQuitToMenu))(owner);
+    ((void(__fastcall*)(void*))((uintptr_t)GetModuleHandleW(nullptr) + Rva(kRvaQuitToMenu)))(owner);
     Log("gameload: quitting to the main menu");
     SetState(kIdle);
     return true;
@@ -268,7 +268,7 @@ bool RequestMainMenu() {
 NewGameOptions GetNewGameOptions() {
     Init();
     NewGameOptions o;
-    uint8_t* lists = *(uint8_t**)((uintptr_t)GetModuleHandleW(nullptr) + kRvaGameUiGlobal);
+    uint8_t* lists = *(uint8_t**)((uintptr_t)GetModuleHandleW(nullptr) + Rva(kRvaGameUiGlobal));
     if (!lists) return o;
     using Count_t = int(__fastcall*)(void* list);
     static Count_t count = (Count_t)RuntimeExport("?GetResourceCount@ExternalList@Object@@QEBAHXZ");

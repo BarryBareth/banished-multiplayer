@@ -49,7 +49,7 @@ static const int kIdMine = 0x300, kIdAll = 0x301;
 static bool g_logButtons;  // the mod's EventLog.rsc is loaded (else the overlay's Messages window is the fallback)
 
 static uint8_t* EventList() {
-    uint8_t* gl = *(uint8_t**)(g_exe + 0x1cbdd8);
+    uint8_t* gl = *(uint8_t**)(g_exe + Rva(0x1cbdd8));
     return gl ? *(uint8_t**)(gl + 0x138) : nullptr;
 }
 static std::vector<int> Shown() {  // event indices the log shows (oldest first)
@@ -199,7 +199,7 @@ template <class F> static void WalkTree(uint8_t* node, F&& f) {
     WalkTree(*(uint8_t**)(node + 0x28), f);
 }
 static uint8_t* ToolUi() {
-    uint8_t* gl = *(uint8_t**)(g_exe + 0x1cbdd8);
+    uint8_t* gl = *(uint8_t**)(g_exe + Rva(0x1cbdd8));
     return gl ? *(uint8_t**)(gl + 0x120) : nullptr;
 }
 static void __fastcall h_ToolUiSerialize(uint8_t* toolUi, uint8_t* stream) {
@@ -249,7 +249,7 @@ void LayoutFrame() {
         ReleaseSRWLockExclusive(&g_layoutLock);
         for (void* tmpl : list) {
             void* dlg = nullptr;  // the toolbar's Utility action (owner = the template)
-            if (tmpl) ((void(__fastcall*)(void*, void**, void*))(g_exe + 0x106f50))(tui, &dlg, tmpl);
+            if (tmpl) ((void(__fastcall*)(void*, void**, void*))(g_exe + Rva(0x106f50)))(tui, &dlg, tmpl);
         }
     }
     static int frame;
@@ -278,7 +278,7 @@ void Install() {
         {0x107df0, (void*)h_ToolUiSerialize, (void**)&o_ToolUiSerialize, "ToolUI serialize"},
     };
     for (auto& h : hooks) {
-        void* target = (void*)(g_exe + h.rva);
+        void* target = (void*)(g_exe + Rva(h.rva));
         MH_STATUS s = MH_CreateHook(target, h.fn, h.orig);
         if (s == MH_OK) s = MH_EnableHook(target);
         Log("gamewin: hook %s -> %s", h.name, MH_StatusToString(s));

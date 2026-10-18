@@ -42,12 +42,12 @@ template <int I> struct Hooks {
         return r;
     }
     static void Install(uintptr_t exe) {
-        MH_STATUS a = MH_CreateHook((void*)(exe + kTypes[I].vf4), (void*)Start, (void**)&o4);
-        if (a == MH_OK) MH_EnableHook((void*)(exe + kTypes[I].vf4));
+        MH_STATUS a = MH_CreateHook((void*)(exe + Rva(kTypes[I].vf4)), (void*)Start, (void**)&o4);
+        if (a == MH_OK) MH_EnableHook((void*)(exe + Rva(kTypes[I].vf4)));
         MH_STATUS b = MH_OK;
         if (kTypes[I].vf5) {
-            b = MH_CreateHook((void*)(exe + kTypes[I].vf5), (void*)Update, (void**)&o5);
-            if (b == MH_OK) MH_EnableHook((void*)(exe + kTypes[I].vf5));
+            b = MH_CreateHook((void*)(exe + Rva(kTypes[I].vf5)), (void*)Update, (void**)&o5);
+            if (b == MH_OK) MH_EnableHook((void*)(exe + Rva(kTypes[I].vf5)));
         }
         if (a != MH_OK || b != MH_OK) Log("actionprobe: %s hook vf4=%s vf5=%s", kTypes[I].name, MH_StatusToString(a), MH_StatusToString(b));
     }

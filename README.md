@@ -16,8 +16,9 @@ game that's already running.
 
 ## What you need
 
-- The **Steam version of Banished** (1.0.7, the normal 64-bit game). The GOG and DRM-free versions are not supported
-  yet: their program file is different, so the mod switches itself off there and says so.
+- **Banished 1.0.7** (the normal 64-bit game), the **Steam or GOG version**. Steam and GOG players can play together.
+  On GOG there is no Steam connection: use a relay server or a direct connection (see below). Other builds of the
+  game have a different program file; the mod switches itself off there and says so.
 - Windows 10 or 11.
 - **Everybody in a game needs the same version of this mod.** The game tells you when the host's version differs.
 
@@ -25,11 +26,14 @@ game that's already running.
 
 1. Download the newest `BanishedMultiplayer-<version>.zip` from the
    [Releases page](../../releases/latest) (also on [Nexus Mods](https://www.nexusmods.com/banished/mods/149)).
-2. Close Banished. Unpack the zip anywhere and double-click **Install.bat**. It finds Banished by itself (or asks
-   where it is) and copies two files:
-   - `dinput8.dll` → the Banished folder (next to `Application-steam-x64.exe`)
+2. Close Banished. Unpack the zip anywhere and double-click **Install.bat**. It finds Banished by itself (Steam and
+   GOG installs; or asks where it is) and copies two files:
+   - `dinput8.dll` → the Banished folder (next to `Application-steam-x64.exe`, or `Application-x64.exe` on GOG)
    - `bmpShare.pkm` → `Banished\WinData`
-3. Start Banished from Steam. The main menu now has a **Multiplayer** button.
+
+   If your copy of Banished isn't found (e.g. a GOG game installed with the offline installer somewhere unusual),
+   unpack the zip into the Banished folder itself and run Install.bat from there.
+3. Start Banished. The main menu now has a **Multiplayer** button.
 
 If you subscribed to the mod on the [**Steam Workshop**](https://steamcommunity.com/sharedfiles/filedetails/?id=3821186063) or got
 `bmpShare.pkm` from [banishedinfo.com](https://banishedinfo.com/mods/view/538-Banished-Multiplayer), you already have the mod file. You still need the

@@ -112,7 +112,7 @@ bool Init(const wchar_t* logPath) {
                        (LPCWSTR)&Init, &self);
     Range(self, g_selfLo, g_selfHi);
     Range(GetModuleHandleW(nullptr), g_exeLo, g_exeHi);
-    if (HMODULE rt = GetModuleHandleW(L"Runtime-steam-x64.dll")) Range(rt, g_rtLo, g_rtHi);
+    if (HMODULE rt = GetModuleHandleW(gamebuild::RuntimeDll())) Range(rt, g_rtLo, g_rtHi);
     g_sites = new std::unordered_map<uint64_t, Site>();
     g_log = _wfsopen(logPath, L"w", _SH_DENYNO);
     AddVectoredExceptionHandler(1, Handler);
