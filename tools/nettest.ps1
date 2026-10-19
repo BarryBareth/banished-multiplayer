@@ -35,8 +35,8 @@ param(
     [switch]$ViaRelay,
     [string]$RelayAddr = '',  # -ViaRelay: use this relay server (host:port) instead of starting a local one    # -InGameHost through tools/bmp_relay.py (port 7780): host and guests connect out to it
     [ValidateRange(2, 3)][int]$Players = 2,   # -InGameHost: 3 = a third instance (slot 2, chaos) plays too
-    [string]$Gog0 = '',  # slot 0 (the host) runs the GOG build from this folder
-    [string]$Gog1 = '',  # slot 1 runs the GOG build from this folder (mixed Steam + GOG session; installs the DLL + mod there)
+    [string]$Gog0 = '',  # slot 0 (the host) runs the game in this folder instead (GOG, or another Steam-build copy)
+    [string]$Gog1 = '',  # slot 1 runs the game in this folder (GOG or another copy; installs the DLL + mod there)
     [string]$GogAll = ''  # every instance runs the GOG build from this folder (installs the DLL + mod there)
 )
 $ErrorActionPreference = 'Stop'
@@ -45,6 +45,7 @@ $root = Split-Path $PSScriptRoot
 $game = Get-BanishedDir
 $exeName = 'Application-steam-x64'
 $gogExe = 'Application-x64'
+function ExeIn([string]$d) { (Get-ChildItem -LiteralPath $d -Filter 'Application*x64.exe' | Select-Object -First 1).FullName }  # GOG or Steam program
 if ($GogAll) {
     $game = $GogAll
     $exeName = $gogExe
@@ -96,10 +97,10 @@ foreach ($d in $dirs | Select-Object -Skip 1) { Copy-Item "$game\bmp_net.txt", "
 if ($NoMod1) { '1' | Set-Content "$game\bmp_nomod_p1.txt" }
 if ($Jitter) { foreach ($d in $dirs) { '1' | Set-Content "$d\bmp_heapjitter_p1.txt"; '1' | Set-Content "$d\bmp_heapjitter_p2.txt" } }
 try {
-    if ($Gog0) { Start-Process "$Gog0\$gogExe.exe" -WorkingDirectory $Gog0 | Out-Null }
+    if ($Gog0) { Start-Process -FilePath (ExeIn $Gog0) -WorkingDirectory $Gog0 | Out-Null }
     else { Start-Process "$game\$exeName.exe" -WorkingDirectory $game | Out-Null }
     Start-Sleep 8
-    if ($Gog1) { Start-Process "$Gog1\$gogExe.exe" -WorkingDirectory $Gog1 | Out-Null }
+    if ($Gog1) { Start-Process -FilePath (ExeIn $Gog1) -WorkingDirectory $Gog1 | Out-Null }
     else { Start-Process "$game\$exeName.exe" -WorkingDirectory $game | Out-Null }
     if ($Players -ge 3) { Start-Sleep 8; Start-Process "$game\$exeName.exe" -WorkingDirectory $game | Out-Null }
     $deadline = $start.AddMinutes($TimeoutMin)

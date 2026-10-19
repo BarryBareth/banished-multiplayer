@@ -13,13 +13,16 @@ $guestDir = if ($Gog1) { $Gog1 } else { $game }
 $gogArgs = @{}
 if ($Gog0) { $gogArgs.Gog0 = $Gog0 }
 if ($Gog1) { $gogArgs.Gog1 = $Gog1 }
+$runStart = Get-Date
 $out = & "$PSScriptRoot\nettest.ps1" -InGameHost -NoPick -Separate '12345,1,2,0,0' -Calm -Speed 10 -NoSpeedChaos -Ticks $Ticks `
     -TimeoutMin 14 -UiScript "$root\tests\uitests\host_controls.txt" -UiScript1 "$root\tests\uitests\guest_foreign.txt" @gogArgs 2>&1
 $fail = @()
 $cmp = $out | Select-String 'IDENTICAL|diverged' | ForEach-Object Line
 if (-not $cmp) { $fail += 'no comparison output (did the games run?)' }
 $cmp | Where-Object { $_ -match 'diverged' } | ForEach-Object { $fail += "simulation: $_" }
-foreach ($cd in $hostDir, $guestDir) { if ((Test-Path "$cd\crash.dmp") -and (Get-Item "$cd\crash.dmp").LastWriteTime -gt (Get-Date).AddMinutes(-15)) { $fail += 'a game crashed (crash.dmp)' } }
+foreach ($cd in @($hostDir, $guestDir) | Select-Object -Unique) {  # only a crash during this run counts
+    if ((Test-Path "$cd\crash.dmp") -and (Get-Item "$cd\crash.dmp").LastWriteTime -gt $runStart) { $fail += "a game crashed ($cd\crash.dmp)" }
+}
 $host0 = Get-Content "$hostDir\bmp.log"
 $tests = $host0 | Select-String 'UITEST (PASS|FAIL)' | ForEach-Object Line
 $tests | Where-Object { $_ -match 'UITEST FAIL' } | ForEach-Object { $fail += $_ }

@@ -8,6 +8,7 @@
 #include "steam.h"
 #include "zipwrite.h"
 #include "autotest.h"
+#include "gameload.h"
 #include <shlobj.h>
 #include <shellapi.h>
 #include <winhttp.h>
@@ -484,8 +485,13 @@ static void CrashPrompt() {
 }
 
 void Frame(void* ui, bool inMenu) {
-    if (inMenu && ui && *SlotSuffix() == 0) CrashPrompt();  // not for test instances (slot 1+)
+    // The crash prompt only lives in the main menu, never while a load is starting: opened during a load it landed on
+    // the half-built game screen and crashed the first in-game frame (2026-10-19).
+    gameload::State st = gameload::Current();
+    bool loading = st == gameload::kListing || st == gameload::kLoading || st == gameload::kStarting;
+    if (inMenu && ui && !loading && *SlotSuffix() == 0) CrashPrompt();  // not for test instances (slot 1+)
     if (!g_wanted || !ui) return;
+    if (g_win.crash && !g_win.IsOpen() && (!inMenu || loading)) return;  // wait for the main menu
     if (!g_win.IsOpen() && !g_win.Open(ui)) g_wanted = false;  // no companion mod: nothing to show
 }
 
