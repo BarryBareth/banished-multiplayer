@@ -90,6 +90,12 @@ In the game, the multiplayer bar at the top of the screen shows the players and 
 
 Game speed and pause are shared: when one player changes them, it changes for everybody.
 
+**See each other:** the other players' mouse cursors show on the map with their names, in their town's colour.
+**Alt + left click** pings a spot: everybody sees rings there for a few seconds and hears a short chime. A ping off
+screen gets an arrow at the edge of the screen; click its button to fly the camera there. To hide the other players'
+cursors, add the line `cursors=0` to `Banished\bmp_settings.txt`. (Cursors and pings need the DirectX 11 renderer, like
+the town colours.)
+
 ## Problems
 
 - **No Multiplayer button / a message saying a file is missing:** `bmpShare.pkm` is missing or from another version

@@ -1,0 +1,10 @@
+# guest (town 2 at 305,190): sees the host's cursor + pings; points at / pings near the host's camera
+150 cursor 208 230
+200 cursor focus 300 186
+300 screenshot presence_guest_cursor
+360 cursor focus 312 196
+480 screenshot presence_guest_ping
+520 ping 200 220
+600 cursor focus 150 300
+640 screenshot presence_guest_offscreen
+1000 screenshot presence_guest_cursor_off

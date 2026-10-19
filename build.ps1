@@ -13,7 +13,7 @@ New-Item -ItemType Directory -Force "$root\build" | Out-Null
 
 $srcs = @(
     "$root\src\proxy.cpp", "$root\src\log.cpp", "$root\src\hooks.cpp", "$root\src\simheap.cpp", "$root\src\autotest.cpp", "$root\src\actionprobe.cpp", "$root\src\simwatch.cpp", "$root\src\commands.cpp", "$root\src\visualstub.cpp", "$root\src\net.cpp",
-    "$root\src\steam.cpp", "$root\src\gameload.cpp", "$root\src\overlay.cpp", "$root\src\towns.cpp", "$root\src\tint.cpp", "$root\src\uiscript.cpp", "$root\src\gameui.cpp", "$root\src\gamewin.cpp", "$root\src\mpdialog.cpp", "$root\src\gamedlg.cpp", "$root\src\ingame.cpp", "$root\src\report.cpp", "$root\src\zipwrite.cpp", "$root\src\update.cpp", "$root\src\gamebuild.cpp",
+    "$root\src\steam.cpp", "$root\src\gameload.cpp", "$root\src\overlay.cpp", "$root\src\towns.cpp", "$root\src\tint.cpp", "$root\src\uiscript.cpp", "$root\src\gameui.cpp", "$root\src\gamewin.cpp", "$root\src\mpdialog.cpp", "$root\src\gamedlg.cpp", "$root\src\ingame.cpp", "$root\src\report.cpp", "$root\src\zipwrite.cpp", "$root\src\update.cpp", "$root\src\gamebuild.cpp", "$root\src\presence.cpp", "$root\src\keyboard.cpp",
     "$root\third_party\imgui\imgui.cpp", "$root\third_party\imgui\imgui_draw.cpp", "$root\third_party\imgui\imgui_tables.cpp",
     "$root\third_party\imgui\imgui_widgets.cpp", "$root\third_party\imgui\backends\imgui_impl_dx11.cpp",
     "$root\third_party\imgui\backends\imgui_impl_win32.cpp",

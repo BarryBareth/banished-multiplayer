@@ -17,6 +17,7 @@
 #include "report.h"
 #include "gamedlg.h"
 #include "tint.h"
+#include "presence.h"
 #include "commands.h"
 #include "autotest.h"
 #include "common.h"
@@ -73,7 +74,9 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM w, LPARAM l) {
 }
 
 void FilterMouse(uint8_t* state) {
-    if (!g_wantMouse || !state) return;
+    if (!state) return;
+    if (presence::BlockLeftClick()) *(uint16_t*)(state + 4 * 0x18 + 4) = 0;  // Alt+click = ping: not a game click
+    if (!g_wantMouse) return;
     for (int b = 4; b <= 12; b++) *(uint16_t*)(state + b * 0x18 + 4) = 0;  // buttons 4..11, wheel 12
 }
 
@@ -903,6 +906,7 @@ void GameFrame() {
         }).detach();
     }
     g_native = ingame::Frame(u);
+    presence::Frame(u.active && u.started && u.inGame);
     report::Frame(u.inMenu ? (g_menuDialog ? gameui::UiOfDialog(g_menuDialog) : nullptr) : gamedlg::GameUi(), u.inMenu);
     if (!u.inGame) { g_inGameSince = 0; return; }
     if (!g_inGameSince) g_inGameSince = GetTickCount64();
@@ -994,6 +998,7 @@ static void UpdateNotice(const net::UiInfo& u) {
 static void DrawUi() {
     net::UiInfo u = net::GetUiInfo();
     TownColours(u);
+    if (u.active && u.started && u.inGame) presence::Draw(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y, g_scale);
     if (!u.inMenu) g_menuDialog = nullptr;  // the menu's dialog dies with it (set again by h_MenuInit)
     mpdialog::MenuTest(g_menuDialog ? gameui::UiOfDialog(g_menuDialog) : nullptr, RequestScreenshot);  // tests only
     bool native = g_native;  // the game-styled windows work (GameFrame); else the ImGui ones below
@@ -1117,9 +1122,12 @@ static bool NoOverlayTest() {  // test (<game>\bmp_nooverlay<suffix>.txt): no Pr
     return GetFileAttributesW(p) != INVALID_FILE_ATTRIBUTES;
 }
 
-static void HookPresent() {
-    if (NoOverlayTest()) { Log("test: overlay Present hook skipped (bmp_nooverlay)"); return; }
-    // A throwaway device + swap chain gives the IDXGISwapChain vtable (Present = 8, ResizeBuffers = 13).
+// A throwaway device + swap chain gives the IDXGISwapChain vtable (Present = 8, ResizeBuffers = 13). Made on a helper
+// thread with a time limit: on a PC where creating it hangs (seen 2026-10-19: a copy with a Steam emulator, after a
+// graphics-driver hiccup) the game must still start - without the overlay - instead of freezing on the loading screen.
+static void* g_probePresent;
+static void* g_probeResize;
+static DWORD WINAPI ProbeThread(void*) {
     WNDCLASSEXW wc{sizeof wc};
     wc.lpfnWndProc = DefWindowProcW;
     wc.hInstance = GetModuleHandleW(nullptr);
@@ -1141,16 +1149,35 @@ static void HookPresent() {
     if (FAILED(hr) || !sc) {
         Log("!! overlay: probe swap chain failed (0x%08lx)", hr);
         DestroyWindow(w);
-        return;
+        return 0;
     }
     void** vt = *(void***)sc;
-    void* present = vt[8];
-    void* resize = vt[13];
+    g_probePresent = vt[8];
+    g_probeResize = vt[13];
     sc->Release();
     ctx->Release();
     dev->Release();
     DestroyWindow(w);
     UnregisterClassW(wc.lpszClassName, wc.hInstance);
+    return 0;
+}
+
+static void HookPresent() {
+    if (NoOverlayTest()) { Log("test: overlay Present hook skipped (bmp_nooverlay)"); return; }
+    ULONGLONG t0 = GetTickCount64();
+    HANDLE th = CreateThread(nullptr, 0, ProbeThread, nullptr, 0, nullptr);
+    if (!th) { Log("!! overlay: no probe thread"); return; }
+    DWORD wr = WaitForSingleObject(th, 10000);
+    CloseHandle(th);
+    if (wr != WAIT_OBJECT_0) {
+        Log("!! overlay: creating the probe graphics device hasn't finished in 10 s - overlay off for this run (cursors, "
+            "pings and town colours need it; everything else works)");
+        return;
+    }
+    if (!g_probePresent) return;
+    if (GetTickCount64() - t0 > 2000) Log("overlay: the probe graphics device took %llu ms", GetTickCount64() - t0);
+    void* present = g_probePresent;
+    void* resize = g_probeResize;
     MH_STATUS a = MH_CreateHook(present, (void*)h_Present, (void**)&o_Present);
     MH_STATUS b = MH_CreateHook(resize, (void*)h_Resize, (void**)&o_Resize);
     MH_EnableHook(present);

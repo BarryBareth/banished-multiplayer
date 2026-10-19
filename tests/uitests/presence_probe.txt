@@ -1,0 +1,14 @@
+# the mouse-ray path (presence GroundAt): cell centres projected to the screen and cast back must land in the same cell
+100 cursor focus 205 225
+200 cursor probe -205 225
+210 cursor probe -210 230
+220 cursor probe -200 218
+230 cursor probe -215 222
+240 cursor probe 1024 540
+250 cursor probe 300 300
+260 cursor probe 1800 900
+300 cursor focus 230 190
+400 cursor probe -232 192
+410 cursor probe -226 186
+420 cursor probe 1024 300
+430 screenshot probe

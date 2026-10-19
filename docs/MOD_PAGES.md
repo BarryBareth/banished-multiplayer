@@ -24,6 +24,7 @@ Play Banished together with other players:
 [list]
 [*][b]Share one town[/b] - everybody runs the same town together.
 [*][b]Separate towns[/b] - everybody builds their own town on the same map, and you can trade goods, share storage buildings and lend each other workplaces.
+[*][b]See each other[/b] - the other players' cursors show on the map, and Alt + click pings a spot for everybody.
 [/list]
 
 Every player's game runs the whole simulation in sync and only the players' actions travel over the network. If the games ever drift apart, the host's game is reloaded on everyone's PC automatically. Players can join a game that's already running.
@@ -63,6 +64,7 @@ BANISHED MULTIPLAYER
 Play Banished together with other players:
 - Share one town: everybody runs the same town together.
 - Separate towns: everybody builds their own town on the same map - trade goods, share storage buildings and lend each other workplaces.
+- See each other: the other players' cursors show on the map, and Alt + click pings a spot for everybody.
 
 Every player's game runs the whole simulation in sync; only the players' actions travel over the network. If the games ever drift apart, the host's game is reloaded on everyone's PC automatically. Players can join a game that's already running.
 
@@ -92,6 +94,7 @@ BANISHED MULTIPLAYER
 Play Banished together with other players:
 - Share one town: everybody runs the same town together.
 - Separate towns: everybody builds their own town on the same map - trade goods, share storage buildings and lend each other workplaces.
+- See each other: the other players' cursors show on the map, and Alt + click pings a spot for everybody.
 
 Every player's game runs the whole simulation in sync; only the players' actions travel over the network. If the games ever drift apart, the host's game is reloaded on everyone's PC automatically. Players can join a game that's already running.
 

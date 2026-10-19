@@ -1,0 +1,7 @@
+# host (town 1 at 205,225): cursor + pings near the guest's camera (town 2 at 305,190), one far away (off screen)
+100 cursor 300 186
+400 ping 312 196
+420 ping 40 40
+560 cursor focus 200 220
+700 screenshot presence_host
+900 cursor off

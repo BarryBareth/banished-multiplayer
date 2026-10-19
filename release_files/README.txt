@@ -75,6 +75,10 @@ Resync, Leave and the bug button.
 
 Speed and pause work for everybody at once.
 
+The other players' mouse cursors show on the map with their names. Alt + left click pings a spot:
+everybody sees it for a few seconds (an arrow at the screen edge when it's off screen - click its
+button to go there). Hide the others' cursors with the line cursors=0 in bmp_settings.txt.
+
 
 PROBLEMS
 --------

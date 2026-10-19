@@ -19,6 +19,7 @@ void* RuntimeExport(const char* mangled);
 
 // Install all hooks. Called once, on the game's main thread.
 void InstallHooks();
+namespace keyboard { void Install(); }  // keyboard.cpp: text boxes follow the player's keyboard layout
 
 // The companion data mod (WinData\bmpShare.pkm) as this player has it: kModOk = installed and the build this DLL
 // expects, kModMissing = not installed, kModOther = another build of it (older or newer copy). Main thread, once the

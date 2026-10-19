@@ -47,6 +47,8 @@ int EventTown(int index);
 void SetEventsMineOnly(bool on);         // UI: popups only for the local town's events
 bool EventsMineOnly();
 void FocusCell(int cell);              // UI: camera to a map cell (y * size + x)
+int MapSize();                         // cells per side (0 = no game)
+bool TerrainZ(float x, float y, float* z);  // UI: ground height at a world point (false = off the map)
 void ShareStorage(int owner, void* storage, int target, bool on);  // simulation (command): one building usable by target
 bool IsOwnStorage(void* entity);                 // a storage building (in its owner's storage list)
 bool SharedWith(void* storage, int town);

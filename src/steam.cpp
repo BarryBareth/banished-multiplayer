@@ -1,6 +1,9 @@
 // Steam lobby + P2P through the game's steam_api64.dll (see steam.h).
 #include "steam.h"
 #include "common.h"
+#include <softpub.h>
+#include <wintrust.h>
+#pragma comment(lib, "wintrust.lib")
 #include <deque>
 #include <map>
 
@@ -223,11 +226,40 @@ static void OnPresenceJoin(const GameRichPresenceJoinRequested_t& c) {
 static Callback<GameRichPresenceJoinRequested_t, 337> cbPresenceJoin(OnPresenceJoin);
 static Callback<MsgSessionFailed_t, 1252> cbMsgFail(OnMsgFailed);
 
+// The game starts Steam itself before its main loop runs. Asking the API earlier, or from another thread, can wait forever
+// inside a Steam emulator (a pirated copy hung on its loading screen, 2026-10-19 - the game's own Steam start then
+// waited for ours). Until the main loop has run once (SetReady, main thread) Init just answers "not yet".
+static DWORD g_readyThread;
+void SetReady() { if (!g_readyThread) g_readyThread = GetCurrentThreadId(); }
+
+// Valve signs steam_api64.dll; Steam emulators (cracked copies) replace it with an unsigned one that has no lobbies or
+// networking and can block forever when asked (a pirated copy froze before its first frame, 2026-10-19).
+static bool SignedSteamApi(HMODULE api) {
+    wchar_t path[MAX_PATH];
+    if (!GetModuleFileNameW(api, path, MAX_PATH)) return false;
+    WINTRUST_FILE_INFO file{sizeof file};
+    file.pcwszFilePath = path;
+    GUID action = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+    WINTRUST_DATA wd{sizeof wd};
+    wd.dwUIChoice = WTD_UI_NONE;
+    wd.fdwRevocationChecks = WTD_REVOKE_NONE;
+    wd.dwUnionChoice = WTD_CHOICE_FILE;
+    wd.pFile = &file;
+    wd.dwStateAction = WTD_STATEACTION_VERIFY;
+    wd.dwProvFlags = WTD_CACHE_ONLY_URL_RETRIEVAL;
+    LONG r = WinVerifyTrust((HWND)INVALID_HANDLE_VALUE, &action, &wd);
+    wd.dwStateAction = WTD_STATEACTION_CLOSE;
+    WinVerifyTrust((HWND)INVALID_HANDLE_VALUE, &action, &wd);
+    return r == ERROR_SUCCESS;
+}
+
 bool Init() {
     if (g_tried) return g_ok;
+    if (!g_readyThread || GetCurrentThreadId() != g_readyThread) return false;  // too early / not the main thread
     g_tried = true;
     HMODULE api = GetModuleHandleW(L"steam_api64.dll");
     if (!api) { Log("steam: steam_api64.dll not loaded"); return false; }
+    if (!SignedSteamApi(api)) { Log("steam: steam_api64.dll isn't Valve's (a Steam emulator?) - Steam features off"); return false; }
     auto client = (SteamClient_t)GetProcAddress(api, "SteamClient");
     auto getUser = (GetHandle_t)GetProcAddress(api, "SteamAPI_GetHSteamUser");
     auto getPipe = (GetHandle_t)GetProcAddress(api, "SteamAPI_GetHSteamPipe");

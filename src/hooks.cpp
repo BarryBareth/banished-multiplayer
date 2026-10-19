@@ -20,6 +20,7 @@
 #include "gameload.h"
 #include "overlay.h"
 #include "towns.h"
+#include "steam.h"
 #include "gamewin.h"
 #include "tint.h"
 #include "uiscript.h"
@@ -1089,6 +1090,7 @@ static void RetryHeldStats() {
 }
 
 static bool __fastcall h_MainLoopUpdate(void* self, const int64_t* time) {
+    steam::SetReady();  // the game has started Steam by now: the mod may talk to it (main thread only)
     RetryHeldStats();
     gameload::Frame();
     net::Frame();
@@ -1473,6 +1475,7 @@ void InstallHooks() {
         Hook("?OnUserStatsReceived@AchievementManager@Achievement@@QEAAXPEAUUserStatsReceived_t@@@Z", (void*)h_StatsReceived,
              (void**)&o_StatsReceived);
     gameload::Init();
+    keyboard::Install();  // text boxes type with the player's keyboard layout (keyboard.cpp)
     {
         wchar_t dbg[MAX_PATH];
         GetModuleFileNameW(nullptr, dbg, MAX_PATH);

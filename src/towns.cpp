@@ -1867,6 +1867,27 @@ static void FocusCamera(int x, int y) {
     *(uint8_t*)(ui + 0xa4) = 1;
 }
 
+int MapSize() {
+    uint8_t* gl = GameLoop();
+    int* map = gl ? *(int**)(gl + 0xf8) : nullptr;
+    return map ? *map : 0;
+}
+
+bool TerrainZ(float x, float y, float* z) {  // UI: ground height at world x/y (cell x spans [x - size/2, x + 1 - size/2])
+    uint8_t* gl = GameLoop();
+    int* map = gl ? *(int**)(gl + 0xf8) : nullptr;
+    if (!map || *map <= 0) return false;
+    float half = (float)(*map / 2);
+    if (x < -half || y < -half || x >= half || y >= half) return false;
+    NonSim ns;  // the terrain query may allocate: never in the sim heap
+    float in[4] = {x, y, 0, 0}, o[4] = {};
+    using Terrain_t = float*(__fastcall*)(void*, float*, float*, char, void*);
+    float* t = ((Terrain_t)(g_exe + Rva(0xa48b0)))(map, o, in, 0, nullptr);
+    if (!t) return false;
+    *z = t[2];
+    return true;
+}
+
 void FocusCell(int cell) {  // UI: camera to a map cell index (y * size + x)
     uint8_t* gl = GameLoop();
     int size = gl && *(int**)(gl + 0xf8) ? **(int**)(gl + 0xf8) : 0;

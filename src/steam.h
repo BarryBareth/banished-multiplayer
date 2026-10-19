@@ -9,6 +9,7 @@
 // SteamFriends017) and Valve's GameNetworkingSockets (SteamNetworkingMessages002 / Utils004). No SDK files are needed.
 namespace steam {
 bool Init();                                   // lazy; false if Steam isn't running / the API isn't loaded
+void SetReady();                               // main loop running (main thread): Init may talk to the Steam API now
 void RunCallbacks();                           // main thread, every frame
 uint64_t MySteamId();
 std::string PersonaName();

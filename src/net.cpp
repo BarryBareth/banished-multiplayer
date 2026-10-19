@@ -14,6 +14,7 @@
 #include "steam.h"
 #include "towns.h"
 #include "update.h"
+#include "presence.h"
 #include <algorithm>
 #include <atomic>
 #include <deque>
@@ -105,7 +106,7 @@ static SOCKET g_listenSock = INVALID_SOCKET; // host: direct TCP listener
 
 // Every player must run the identical DLL - any code difference can desync. The build id = release number + a hash of
 // this DLL's code section as stored on disk (in memory it is relocated); HELLO carries it, the host turns away others.
-static constexpr const char* kModVersion = "0.9.3";
+static constexpr const char* kModVersion = "0.9.4";
 static std::string g_fakeVersion;
 static int64_t g_testDropAt = -1;
 static bool g_testCorruptSave;  // bmp_net.txt corruptsave=1 (test): the first save received counts as corrupt
@@ -575,6 +576,8 @@ static void HostReceive(int kind, uint64_t key, const std::string& line) {
         Broadcast(k + " " + std::to_string(pid) + " " + rest);
     } else if (k == "TRADE") {  // offers/answers between players: relay as-is with the sender
         Broadcast("TRADE " + std::to_string(pid) + " " + rest);
+    } else if (k == "CUR" || k == "MARK") {  // cursor positions and pings (presence.cpp): visual only, relayed with the sender
+        if (rest.size() < 40) Broadcast(k + " " + std::to_string(pid) + " " + rest);
     } else if (k == "RESYNCREQ") {  // a player asked for a resync (UI button)
         HostResync(g_peers[pid].name + " asked for a resync");
     } else if (k == "SYNCED") {
@@ -1609,6 +1612,18 @@ void Frame() {
                 g_tradeNews = (g_names.count(from) ? g_names[from] : "The other player") +
                               (yes ? " accepted your trade" : " declined your trade");
             }
+        } else if (l.compare(0, 4, "CUR ") == 0 || l.compare(0, 5, "MARK ") == 0) {
+            // CUR <from> <x> <y> | CUR <from> - (cursor gone) | MARK <from> <x> <y>: world x/y, visual only
+            bool mark = l[0] == 'M';
+            int from = 0;
+            float x = 0, y = 0;
+            int got = sscanf_s(l.c_str() + (mark ? 5 : 4), "%d %f %f", &from, &x, &y);
+            if (got >= 1 && from != g_me) {
+                std::string name = g_names.count(from) ? g_names[from] : "Player " + std::to_string(from);
+                int colour = towns::Count() > 1 && g_townOf.count(from) ? g_townOf[from] : from;
+                if (mark && got == 3) presence::OnPing(from, name, colour, x, y);
+                else if (!mark) presence::OnCursor(from, name, colour, got == 3, x, y);
+            }
         } else if (l.compare(0, 6, "NAMES ") == 0) {
             g_names.clear();
             size_t s = 6;
@@ -1824,6 +1839,11 @@ int TownOfPlayer(int p) {
     }
     return towns::Count() > 1 && g_townOf.count(p) ? g_townOf[p] : 0;
 }
+void SendPresence(const std::string& line) {
+    if (g_active && (g_mode == kHost ? g_hostStarted : g_started)) SendLine(line);
+}
+int Me() { return g_me; }
+
 std::string TradeNews() { return g_tradeNews; }
 void SetTradeNews(const std::string& s) { g_tradeNews = s; }
 

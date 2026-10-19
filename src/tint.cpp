@@ -11,6 +11,7 @@
 #include "common.h"
 #include "towns.h"
 #include "MinHook.h"
+#include <cmath>
 #include <cstring>
 
 namespace tint {
@@ -69,6 +70,64 @@ bool WorldToScreen(const float p[3], float width, float height, float* sx, float
     if (clip[3] <= 0.05f) return false;  // behind the camera
     *sx = (clip[0] / clip[3] * 0.5f + 0.5f) * width;
     *sy = (0.5f - clip[1] / clip[3] * 0.5f) * height;
+    return true;
+}
+
+// 4x4 inverse (general, Gauss-Jordan); false when singular
+static bool Invert4(const float* m, float* out) {
+    double a[4][8];
+    for (int r = 0; r < 4; r++)
+        for (int c = 0; c < 8; c++) a[r][c] = c < 4 ? m[r * 4 + c] : (c - 4 == r ? 1.0 : 0.0);
+    for (int c = 0; c < 4; c++) {
+        int piv = c;
+        for (int r = c + 1; r < 4; r++) if (fabs(a[r][c]) > fabs(a[piv][c])) piv = r;
+        if (fabs(a[piv][c]) < 1e-12) return false;
+        if (piv != c) for (int k = 0; k < 8; k++) { double t = a[c][k]; a[c][k] = a[piv][k]; a[piv][k] = t; }
+        double d = a[c][c];
+        for (int k = 0; k < 8; k++) a[c][k] /= d;
+        for (int r = 0; r < 4; r++) {
+            if (r == c) continue;
+            double f = a[r][c];
+            for (int k = 0; k < 8; k++) a[r][k] -= f * a[c][k];
+        }
+    }
+    for (int r = 0; r < 4; r++)
+        for (int c = 0; c < 4; c++) out[r * 4 + c] = (float)a[r][c + 4];
+    return true;
+}
+
+bool ScreenToRay(float sx, float sy, float width, float height, float origin[3], float dir[3]) {
+    if (!g_mainCam || width <= 0 || height <= 0) return false;
+    const float* r = g_cam;
+    float inv[16];
+    if (!Invert4(g_cam + 12, inv)) return false;
+    float nx = sx / width * 2.f - 1.f, ny = 1.f - sy / height * 2.f;
+    float pts[2][3];
+    for (int k = 0; k < 2; k++) {  // ndc depth 0 and 1 (clip = (c, 1) * P, row vectors) -> camera space -> world
+        float ndc[4] = {nx, ny, (float)k, 1.f}, c[4];
+        for (int j = 0; j < 4; j++) c[j] = ndc[0] * inv[j] + ndc[1] * inv[4 + j] + ndc[2] * inv[8 + j] + ndc[3] * inv[12 + j];
+        if (fabsf(c[3]) < 1e-9f) return false;
+        for (int j = 0; j < 3; j++) c[j] /= c[3];
+        for (int j = 0; j < 3; j++) pts[k][j] = r[9 + j] + c[0] * r[j] + c[1] * r[3 + j] + c[2] * r[6 + j];
+    }
+    float d[3] = {pts[1][0] - pts[0][0], pts[1][1] - pts[0][1], pts[1][2] - pts[0][2]};
+    float len = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    if (len < 1e-6f) return false;
+    for (int j = 0; j < 3; j++) { origin[j] = pts[0][j]; dir[j] = d[j] / len; }
+    return true;
+}
+
+bool CameraSpace(const float p[3], float c[3]) {  // (right, forward, up) components of p relative to the camera
+    if (!g_mainCam) return false;
+    const float* r = g_cam;
+    float d[3] = {p[0] - r[9], p[1] - r[10], p[2] - r[11]};
+    for (int k = 0; k < 3; k++) c[k] = d[0] * r[k * 3] + d[1] * r[k * 3 + 1] + d[2] * r[k * 3 + 2];
+    return true;
+}
+
+bool CameraPosition(float out[3]) {
+    if (!g_mainCam) return false;
+    for (int j = 0; j < 3; j++) out[j] = g_cam[9 + j];
     return true;
 }
 

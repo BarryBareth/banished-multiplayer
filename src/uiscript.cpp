@@ -16,8 +16,12 @@
 //   spin|number|check CLASS OFF STRIDE ROW FIELD VALUE   element at *(*(ui+OFF) + ROW*STRIDE + FIELD) := VALUE
 //   state                         log the opened building's simulation values (workers, limit, crop, tree, animal)
 //   expect TEXT                   "UITEST PASS/FAIL": the last state line contains TEXT
+//   cursor X Y | cursor off       presence: my cursor points at cell X,Y (sent like a real one) / back to the mouse
+//   ping X Y                      presence: ping cell X,Y (like Alt+click)
+//   cursor focus X Y              the camera flies to cell X,Y (like a ping's "go there" button)
 // CLASS = controller class (WorkPlaceUI, TownHallUI, TradeUI, ...); "any" after it: any open window of that class.
 #include "report.h"
+#include "presence.h"
 #include "uiscript.h"
 #include "common.h"
 #include "autotest.h"
@@ -516,6 +520,22 @@ static void Run(const std::string& text) {
         return;
     }
     if (v == "state") { State(); return; }
+    if (v == "cursor" || v == "ping") {  // cursor X Y | cursor off | ping X Y: presence.cpp as if the mouse were at cell X,Y
+        int x = -1, y = -1;
+        sscanf_s(text.c_str(), "%*s %d %d", &x, &y);
+        if (v == "ping") presence::TestPing(x, y);
+        else if (v == "cursor" && std::string(a) == "probe") {  // cursor probe SX SY: the mouse-ray path, logged
+            float sx = 0, sy = 0;
+            sscanf_s(text.c_str(), "%*s %*s %f %f", &sx, &sy);
+            presence::TestProbe(sx, sy);
+        } else if (v == "cursor" && std::string(a) == "focus") {  // cursor focus X Y: the camera flies to cell X,Y
+            sscanf_s(text.c_str(), "%*s %*s %d %d", &x, &y);
+            towns::FocusCell(y * towns::MapSize() + x);
+        }
+        else presence::TestCursor(std::string(a) == "off" ? -1 : x, y);
+        Log("uiscript: %s %d %d", v.c_str(), x, y);
+        return;
+    }
     if (v == "towns") {
         for (int t = 0; t < towns::Count(); t++) Log("uiscript: town %d: %s", t, towns::StorageSummary(t).c_str());
         return;

@@ -60,6 +60,8 @@ std::vector<TradeOffer> IncomingOffers();          // offers to me, waiting for 
 void SendOffer(int toPlayer, const std::string& givePath, int nGive, const std::string& askPath, int nAsk, int period = 0);
 void AnswerOffer(int id, bool accept);
 int TownOfPlayer(int player);
+void SendPresence(const std::string& line);        // CUR / MARK lines (presence.cpp), only in a started session
+int Me();                                          // my player id (-1 = none)
 std::string TradeNews();                           // latest trade message for the UI ("" if none)
 void SetTradeNews(const std::string& s);
 enum UiAction { kUiHost, kUiInvite, kUiStart, kUiResync, kUiLeave, kUiJoin };  // kUiJoin arg: D|host:port or R|room code  // kUiHost arg: "S|<save>" or "N|seed,size,start,terrain,climate"
