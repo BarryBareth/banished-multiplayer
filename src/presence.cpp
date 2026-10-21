@@ -136,6 +136,10 @@ static void SendPing(const float p[3]) {
     sprintf_s(line, "MARK %.1f %.1f", p[0], p[1]);
     net::SendPresence(line);
     Log("presence: ping at %.1f %.1f", p[0], p[1]);
+    std::string name;
+    int colour;
+    net::PresenceIdentity(net::Me(), &name, &colour);
+    OnPing(net::Me(), name, colour, p[0], p[1]);  // my own ping shows here too (the others get it from the host)
 }
 
 void Frame(bool inSession) {

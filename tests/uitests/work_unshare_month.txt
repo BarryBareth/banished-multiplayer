@@ -1,0 +1,14 @@
+# host: gatherer hut shared with town 2, guests take its jobs, unshared - then past the next monthly labor
+# rebalances (every 18000 ticks; crash 2026-10-21 at dae40 a month after an unshare)
+50 cmd win 10 0 0 5 1 - 0
+100 build Template\GathererShelter.rsc near 205 225
+8000 sharework @GathererShelter 1 1
+9500 open @GathererShelter
+9510 state
+9520 close
+9600 towns
+12000 sharework @GathererShelter 1 0
+12500 open @GathererShelter
+12510 state
+12520 close
+12600 towns

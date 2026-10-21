@@ -382,6 +382,7 @@ void TablesChangedBySim() { g_tableSnapValid = false; g_profSnapValid = false; }
 static void ReconcileShares();  // shared storage (below)
 static void PruneCouriers();    // trade couriers (below)
 static void ReconcileWorkShares();  // shared workplaces (below)
+static void SanitizeWorkTrees();    // (below)
 static int HeldOf(void* entity, void* desc);  // (below)
 static void RunAgreements();    // standing trades (below)
 // A town's known goods (Town+0x110, exe+0x97330 adds one) are registered when a pile of a good is created - in the
@@ -417,6 +418,7 @@ void StepTowns(void* origTown, const int64_t* dt, void (*step)(void*, const int6
     RegisterStoredGoods();
     ReconcileShares();
     ReconcileWorkShares();
+    SanitizeWorkTrees();
     PruneCouriers();
     RunAgreements();
     for (int t = 0; t < (int)g_towns.size(); t++) {
@@ -1093,6 +1095,11 @@ bool IsOwnWorkplace(void* e) {  // e may be anything a window controller points 
     return OwnerOf(e) == g_local && WorkKey(e) != nullptr;
 }
 int StockAt(void* e) { return HeldOf(e, nullptr); }  // goods kept in a building (tests)
+void TestGhostWorkers(void* e, int n) {  // test: the building's worker count says n more than really work there
+    uint8_t* comp = e ? (uint8_t*)FindComponent((uint8_t*)e, kTiWorkPlace) : nullptr;
+    if (comp) *(int*)(comp + 0x60) += n;
+    Log("towns: test: %d ghost worker(s) at %p (%s)", n, e, comp ? "ok" : "not a workplace");
+}
 int WorkersOfTownAt(void* e, int t) {  // town t's villagers working at building e
     if (t < 0 || t >= (int)g_towns.size()) return 0;
     uint8_t* town = (uint8_t*)g_towns[t];
@@ -1135,6 +1142,35 @@ static void ReconcileWorkShares() {
             if (t != OwnerOf(e) && (mask & (1 << t))) WorkMapAdd(t, e);
     }
 }
+// Every sim step: a town's tree profession -> workplaces must hold only workplace buildings. A null entry (or one
+// without a WorkPlaceComponent) crashes the next villager looking for a job (exe+0x115eb0 -> exe+0x2e10 reads +0x38 of
+// null) - on every PC at the same tick. Seen 2026-10-21: a 3-player save (after 1.33M ticks with shared workplaces)
+// crashed 44 ticks after every load. Such entries are taken out (the same on every PC) and logged with the tick.
+static void SanitizeWorkTrees() {
+    for (int t = 0; t < (int)g_towns.size(); t++) {
+        std::vector<uint8_t*> nodes;
+        if (uint8_t* root = *(uint8_t**)((uint8_t*)g_towns[t] + 0x100)) nodes.push_back(root);
+        while (!nodes.empty()) {
+            uint8_t* node = nodes.back();
+            nodes.pop_back();
+            void** arr = *(void***)(node + 8);
+            int& n = *(int*)(node + 0x10);
+            for (int i = 0; arr && i < n;) {
+                if (arr[i] && FindComponent((uint8_t*)arr[i], kTiWorkPlace)) { i++; continue; }
+                static int logged;
+                if (logged++ < 50)
+                    Log("!! towns: town %d's workplace list (profession %p) had a broken entry %p (%s) at step %llu - "
+                        "taken out", t, *(void**)node, arr[i], arr[i] ? "not a workplace" : "null",
+                        (unsigned long long)g_steps);
+                for (int j = i; j + 1 < n; j++) arr[j] = arr[j + 1];
+                n--;
+            }
+            if (uint8_t* l = *(uint8_t**)(node + 0x20)) nodes.push_back(l);
+            if (uint8_t* r = *(uint8_t**)(node + 0x28)) nodes.push_back(r);
+        }
+    }
+}
+
 // The monthly labor rebalance (exe+0xd9880, from the town step) of the current town builds an entry per workplace in
 // its tree (Town+0x100) from the building's worker count (WorkPlaceComponent +0x60) and matches the town's own
 // villagers against them - a shared workplace's count includes other towns' villagers, which it never finds (crash at
@@ -1143,25 +1179,51 @@ static void ReconcileWorkShares() {
 using LaborBalance_t = void(__fastcall*)(void* p);
 static LaborBalance_t o_LaborBalance;
 static const uintptr_t kRvaLaborBalance = 0xd9880;
+// It counts the town's adults (CitizenComponent: age +0x3c >= description(+0x288) +0x44, +0x208 == 0) per profession
+// and takes one per job; a job with nobody left = null tree node (crash at dae40). Not only shared workplaces can
+// break that: 2026-10-21 (3 players, a workplace shared with two towns, unshared, a month later) it crashed with no
+// share left. So every workplace in the town's tree counts, during the call, only the town's own adults working there
+// - in a normal game that is already the case and nothing changes.
 static void __fastcall h_LaborBalance(void* p) {
-    if (g_workShare.empty()) return o_LaborBalance(p);
+    uint8_t* gl = GameLoop();
+    uint8_t* town = gl && g_towns.size() > 1 ? *(uint8_t**)(gl + 0xf0) : nullptr;
+    static const bool off = GetFileAttributesW(L"bmp_nolaborfix.txt") != INVALID_FILE_ATTRIBUTES;  // test: the game's
+    if (!town || off) return o_LaborBalance(p);
+    std::unordered_map<void*, int> own;  // workplace -> the town's adults working there
+    for (int i = 0; i < *(int*)(town + 0xa8); i++) {
+        uint8_t* cit = (*(uint8_t***)(town + 0xa0))[i];
+        if (!cit || !*(void**)(cit + 0x248) || *(void**)(cit + 0x208)) continue;
+        uint8_t* desc = *(uint8_t**)(cit + 0x288);
+        if (!desc || *(float*)(desc + 0x44) > *(float*)(cit + 0x3c)) continue;
+        own[*(void**)(cit + 0x248)]++;
+    }
     std::vector<std::pair<uint8_t*, int>> hidden;
-    std::vector<std::pair<uint64_t, void*>> list;
-    for (auto& [e, m] : g_workShare) list.push_back({simheap::Offset((void*)e), (void*)e});
-    std::sort(list.begin(), list.end());
-    int cur = Current();
-    for (auto& [off, e] : list) {
-        if (!WorkKey(e) || (OwnerOf(e) != cur && !WorkSharedWith(e, cur))) continue;
-        int foreign = 0;  // villagers of the other towns working there
-        for (int t = 0; t < (int)g_towns.size(); t++)
-            if (t != cur) foreign += WorkersOfTownAt(e, t);
-        uint8_t* comp = (uint8_t*)FindComponent((uint8_t*)e, kTiWorkPlace);
-        if (!foreign || !comp) continue;
-        *(int*)(comp + 0x60) -= foreign;
-        hidden.push_back({comp, foreign});
+    std::vector<uint8_t*> nodes;
+    if (uint8_t* root = *(uint8_t**)(town + 0x100)) nodes.push_back(root);
+    while (!nodes.empty()) {  // the tree profession -> its workplaces
+        uint8_t* node = nodes.back();
+        nodes.pop_back();
+        void** arr = *(void***)(node + 8);
+        for (int i = 0; arr && i < *(int*)(node + 0x10); i++) {
+            uint8_t* comp = arr[i] ? (uint8_t*)FindComponent((uint8_t*)arr[i], kTiWorkPlace) : nullptr;
+            if (!comp) continue;
+            auto it = own.find(arr[i]);
+            int extra = *(int*)(comp + 0x60) - (it == own.end() ? 0 : it->second);
+            if (extra <= 0) continue;
+            *(int*)(comp + 0x60) -= extra;
+            hidden.push_back({comp, extra});
+            if (!WorkShareMaskOf(arr[i])) {
+                static int logged;
+                if (logged++ < 20)
+                    Log("towns: labor rebalance of town %d: %d worker(s) at a workplace (%p, owner %d, not shared) are "
+                        "not its own adults - left out", Current(), extra, arr[i], OwnerOf(arr[i]));
+            }
+        }
+        if (uint8_t* l = *(uint8_t**)(node + 0x20)) nodes.push_back(l);
+        if (uint8_t* r = *(uint8_t**)(node + 0x28)) nodes.push_back(r);
     }
     o_LaborBalance(p);
-    for (auto& [comp, foreign] : hidden) *(int*)(comp + 0x60) += foreign;
+    for (auto& [comp, extra] : hidden) *(int*)(comp + 0x60) += extra;
 }
 
 // The rebalance's last step (exe+0xdb290..db2ae) gives the villagers left over (taken from a job, not picked by any

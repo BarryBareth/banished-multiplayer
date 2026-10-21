@@ -1,0 +1,11 @@
+# host: a gatherer hut whose worker count says one more than really work there (the state that crashed the monthly
+# labor rebalance at exe+0xdae40 on 2026-10-21) - then past month boundaries (every 18000 ticks)
+50 cmd win 10 0 0 5 1 - 0
+100 build Template\GathererShelter.rsc near 205 225
+9000 open @GathererShelter
+9010 state
+9020 close
+9500 ghostworker @GathererShelter 1
+9600 open @GathererShelter
+9610 state
+9620 close

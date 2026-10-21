@@ -644,6 +644,13 @@ static void Run(const std::string& text) {
         Log("uiscript: openui %s -> window %p", a, dlg);
         return;
     }
+    if (v == "ghostworker") {  // ghostworker @Name N: the building's worker count says N more (labor rebalance test)
+        int x = 0, y = 0, n = 1;
+        for (auto& [name, r] : g_built) if (name == a + 1) { x = (r.x0 + r.x1) / 2; y = (r.y0 + r.y1) / 2; }
+        sscanf_s(text.c_str(), "%*s %*s %d", &n);
+        towns::TestGhostWorkers(EntityAt(x, y), n);
+        return;
+    }
     if (v == "sharework") {  // sharework @Name TOWN 0|1: the shared-workplace checkbox's request for that building
         int x = 0, y = 0, town = 1, on = 1;
         for (auto& [name, r] : g_built) if (name == a + 1) { x = (r.x0 + r.x1) / 2; y = (r.y0 + r.y1) / 2; }

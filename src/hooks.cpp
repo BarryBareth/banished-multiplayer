@@ -892,6 +892,31 @@ static void EnsureCompanionMod() {
         noMod = GetFileAttributesW(path) != INVALID_FILE_ATTRIBUTES;
     }
     int n = *(int*)(mods + 0x10);
+    // test: <game>\bmp_modtoggle<suffix>.txt = the mod whose file name contains this text (on at the game's start) is
+    // switched off at the 2nd loader start and the list saved, like a player using the Mods menu without restarting
+    static int starts;
+    if (++starts == 2) {
+        wchar_t path[MAX_PATH];
+        GetModuleFileNameW(nullptr, path, MAX_PATH);
+        swprintf_s(wcsrchr(path, L'\\') + 1, 64, L"bmp_modtoggle%s.txt", SlotSuffix());
+        char want[128] = {};
+        FILE* f = nullptr;
+        if (_wfopen_s(&f, path, L"r") == 0 && f) {
+            fgets(want, sizeof want, f);
+            fclose(f);
+            want[strcspn(want, "\r\n")] = 0;
+        }
+        for (int i = 0; *want && i < n; i++) {
+            uint8_t* m = *(uint8_t**)(mods + 8) + (int64_t)i * 0x80;
+            const char* name = *(const char**)(m + 0x58);
+            if (name && strstr(name, want)) {
+                enable(mods, i, false);
+                static void(__fastcall * saveList)(void*) = (void(__fastcall*)(void*))RuntimeExport("?SaveList@Modification@IO@@QEAAXXZ");
+                if (saveList) saveList(mods);
+                Log("test: mod %s switched off (bmp_modtoggle)", name);
+            }
+        }
+    }
     for (int i = 0; i < n; i++) {
         uint8_t* m = *(uint8_t**)(mods + 8) + (int64_t)i * 0x80;
         const char* name = *(const char**)(m + 0x58);
@@ -919,6 +944,48 @@ static void EnsureCompanionMod() {
     g_modListed = 0;
 }
 
+// The other mods everybody in a game must share (every PC runs the same simulation, so the same data): the enabled mods
+// in load order as "file name:size" joined with ';', the companion mod left out. Read on the main thread (at every load
+// and every few seconds from net::Frame); any thread gets the last answer.
+static std::mutex g_modSigMx;
+static volatile bool g_modSigKnown;
+static std::string g_modSig;
+// Mods switched on or off in the Mods menu without restarting leave the old mods' resources half loaded: that game
+// drifts from everybody else's and crashed reloading at the resync (2026-10-21, MegaMod switched off then hosting).
+static std::string g_modSigStart;  // the list the game started with
+static volatile bool g_modsChanged;
+void RefreshModsSignature() {
+    static void* (*getMods)() = (void* (*)())RuntimeExport("?Get@Modification@IO@@SAPEAV12@XZ");
+    uint8_t* mods = getMods ? (uint8_t*)getMods() : nullptr;
+    if (!mods) return;
+    std::string sig;
+    int n = *(int*)(mods + 0x10);
+    for (int i = 0; i < n; i++) {
+        uint8_t* m = *(uint8_t**)(mods + 8) + (int64_t)i * 0x80;
+        const char* path = *(const char**)(m + 0x58);
+        if (!path || !m[0x50] || strstr(path, "bmpShare")) continue;
+        const char* base = path;
+        for (const char* p = path; *p; p++) if (*p == '\\' || *p == '/') base = p + 1;
+        WIN32_FILE_ATTRIBUTE_DATA fa{};
+        unsigned long long size = GetFileAttributesExA(path, GetFileExInfoStandard, &fa) ? ((unsigned long long)fa.nFileSizeHigh << 32) | fa.nFileSizeLow : 0;
+        std::string name = base;
+        for (auto& c : name) if (c == ';' || c == ':' || c == '\n' || c == '\r') c = '_';
+        sig += (sig.empty() ? "" : ";") + name + ":" + std::to_string(size);
+    }
+    std::lock_guard<std::mutex> l(g_modSigMx);
+    if (sig != g_modSig) Log("mods: %s", sig.empty() ? "no other mods enabled" : sig.c_str());
+    if (!g_modSigKnown) g_modSigStart = sig;
+    else if (sig != g_modSigStart && !g_modsChanged) {
+        g_modsChanged = true;
+        Log("mods: changed since the game started - multiplayer needs a restart first");
+    }
+    g_modSig = sig;
+    g_modSigKnown = true;
+}
+bool ModsKnown() { return g_modSigKnown; }
+bool ModsChangedSinceStart() { return g_modsChanged; }
+std::string ModsSignature() { std::lock_guard<std::mutex> l(g_modSigMx); return g_modSig; }
+
 // The mod's marker BMP/Version_<hash>.rsc (mod/make_mod_sources.ps1) names the build of the mod; this DLL was built
 // against BMP_MOD_VERSION. Looked up once (a found marker stays found; a missing one is looked for again at most
 // every 5 s, in case the mod's files were not mounted yet).
@@ -943,6 +1010,7 @@ int CompanionMod() {
 
 static void __fastcall h_LoaderStartup(void* self) {
     EnsureCompanionMod();
+    RefreshModsSignature();
     if (g_s.loop) Log("session end: GameLoop=%p after %llu ticks", g_s.loop, g_s.tick);
     FlushTick();
     g_s = Session{};

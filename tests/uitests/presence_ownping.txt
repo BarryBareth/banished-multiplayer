@@ -1,0 +1,4 @@
+# host (town 1 at 205,225): pings next to its own camera - its own ping must show on its own screen (rings + name)
+100 cursor focus 205 225
+400 ping 208 228
+440 screenshot presence_ownping

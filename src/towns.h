@@ -58,6 +58,7 @@ bool WorkSharedWith(void* workplace, int town);
 bool IsOwnWorkplace(void* entity);                 // one of the local town's workplace buildings
 int WorkersOfTownAt(void* workplace, int town);    // town's villagers working there
 int StockAt(void* building);                       // tests: goods kept in that building
+void TestGhostWorkers(void* building, int n);       // tests: inflate its worker count (labor rebalance crash)
 int ForeignWorkersAt(void* workplace);             // UI: other towns' villagers working there
 std::string StorageSummary(int town);  // tests: "N storages (own a, from others b), goods total G"
 // Probe: " pos=<hash> p=t:h16,..." - every villager's exact position (town:16-bit hash, in each town's citizen list

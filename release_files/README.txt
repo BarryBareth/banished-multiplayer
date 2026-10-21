@@ -85,6 +85,12 @@ PROBLEMS
 - No Multiplayer button: bmpShare.pkm is missing or from another version - the game tells you
   at the main menu. Run Install.bat again.
 - "Different mod version": you and the host have different versions. Both install the same zip.
+- "Your mods differ from the host's": other mods work only if every player has exactly the same ones
+  (same files, same versions, same order in the Mods menu). The message says which ones differ.
+- "You changed mods since starting Banished": after switching mods on or off, restart the game
+  before hosting or joining.
+- Pings make a sound but you don't see them: the mod draws on screen (pings, cursors, the bar)
+  only with the DirectX 11 renderer - choose it in Banished's video options.
 - Something went wrong: press the bug button (the bug icon in the multiplayer window or bar),
   write what you were doing, and press Send. If the game crashed, it offers to send a report the
   next time you start it. The logs in a report have names, Steam IDs and addresses taken out. After a crash the

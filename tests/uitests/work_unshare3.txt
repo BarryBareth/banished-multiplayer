@@ -1,0 +1,26 @@
+# host (3 players): gatherer hut shared with towns 2 and 3, their villagers take its jobs, unshared from both;
+# shared again and unshared again - then past several monthly labor rebalances (crash 2026-10-21 at dae40)
+50 cmd win 10 0 0 5 1 - 0
+60 cmd win 10 0 0 5 1 - 0
+100 build Template\GathererShelter.rsc near 205 225
+8000 sharework @GathererShelter 1 1
+8010 sharework @GathererShelter 2 1
+9500 open @GathererShelter
+9510 state
+9520 close
+9600 towns
+12000 sharework @GathererShelter 1 0
+12010 sharework @GathererShelter 2 0
+12500 open @GathererShelter
+12510 state
+12520 close
+20000 sharework @GathererShelter 1 1
+20010 sharework @GathererShelter 2 1
+23000 open @GathererShelter
+23010 state
+23020 close
+24000 sharework @GathererShelter 2 0
+24010 sharework @GathererShelter 1 0
+24500 open @GathererShelter
+24510 state
+24520 close

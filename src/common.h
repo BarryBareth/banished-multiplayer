@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <cstdint>
 #include <cstdio>
+#include <string>
 #include "gamebuild.h"
 
 // Several game instances can run from the same folder (local multiplayer testing): each claims a slot at
@@ -26,4 +27,10 @@ namespace keyboard { void Install(); }  // keyboard.cpp: text boxes follow the p
 // game has started (before that: kModOk).
 enum { kModOk, kModMissing, kModOther };
 int CompanionMod();
-int CompanionModKnown();  // the last answer of CompanionMod(), any thread (overlay::GameFrame asks every frame)
+int CompanionModKnown();
+// The other enabled mods ("file:size;..." in load order, the companion mod left out): every player in a game must have
+// the same. Refresh on the main thread; ModsSignature returns the last answer (any thread).
+void RefreshModsSignature();
+std::string ModsSignature();
+bool ModsKnown();  // RefreshModsSignature has read the list (it runs when the game starts loading its data)
+bool ModsChangedSinceStart();  // mods switched on/off since the game started: multiplayer needs a restart

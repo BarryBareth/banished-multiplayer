@@ -106,7 +106,7 @@ static SOCKET g_listenSock = INVALID_SOCKET; // host: direct TCP listener
 
 // Every player must run the identical DLL - any code difference can desync. The build id = release number + a hash of
 // this DLL's code section as stored on disk (in memory it is relocated); HELLO carries it, the host turns away others.
-static constexpr const char* kModVersion = "0.9.4";
+static constexpr const char* kModVersion = "0.9.5";
 static std::string g_fakeVersion;
 static int64_t g_testDropAt = -1;
 static bool g_testCorruptSave;  // bmp_net.txt corruptsave=1 (test): the first save received counts as corrupt
@@ -164,10 +164,57 @@ static const std::string& HelloToken() {
     }
     return t;
 }
+// My other mods (ModsSignature) - bmp_net.txt fakemods=<file:size;...> pretends another list (tests)
+static std::string g_testMods;
+static bool g_testModsSet;
+static std::string MyMods() { return g_testModsSet ? g_testMods : ModsSignature(); }
+
+static const char kRestartForMods[] =
+    "You changed mods since starting Banished - restart the game before playing multiplayer";
+
+// "MODS <file:size;...>" goes first (the host compares it at the HELLO), then the HELLO itself
 static std::string Hello(const std::string& name) {
     int mod = CompanionModKnown();
-    return "HELLO @" + BuildId() + (mod != kModOk ? "!" + std::to_string(mod) : "") + "#" + HelloToken() + " " + name;
+    return "MODS " + MyMods() + "\nHELLO @" + BuildId() + (mod != kModOk ? "!" + std::to_string(mod) : "") + "#" +
+           HelloToken() + " " + name;
 }
+
+// What differs between two mod lists, from the joining player's side ("" = the same)
+static std::string ModsDifference(const std::string& host, const std::string& guest) {
+    if (host == guest) return "";
+    auto split = [](const std::string& s) {
+        std::vector<std::pair<std::string, std::string>> v;  // file name, size
+        size_t a = 0;
+        while (a < s.size()) {
+            size_t b = s.find(';', a);
+            if (b == std::string::npos) b = s.size();
+            std::string item = s.substr(a, b - a);
+            size_t c = item.rfind(':');
+            if (!item.empty()) v.push_back({c == std::string::npos ? item : item.substr(0, c), c == std::string::npos ? "" : item.substr(c + 1)});
+            a = b + 1;
+        }
+        return v;
+    };
+    auto h = split(host), g = split(guest);
+    auto find = [](const std::vector<std::pair<std::string, std::string>>& v, const std::string& n) {
+        for (auto& e : v) if (_stricmp(e.first.c_str(), n.c_str()) == 0) return &e;
+        return (const std::pair<std::string, std::string>*)nullptr;
+    };
+    std::string missing, extra, other;
+    for (auto& e : h) {
+        auto* m = find(g, e.first);
+        if (!m) missing += (missing.empty() ? "" : ", ") + e.first;
+        else if (m->second != e.second) other += (other.empty() ? "" : ", ") + e.first;
+    }
+    for (auto& e : g) if (!find(h, e.first)) extra += (extra.empty() ? "" : ", ") + e.first;
+    std::string s;
+    if (!missing.empty()) s += "the host has mods you don't (or that are switched off): " + missing + ". ";
+    if (!extra.empty()) s += "you have mods the host doesn't: " + extra + ". ";
+    if (!other.empty()) s += "another version than the host's: " + other + ". ";
+    if (s.empty()) s = "the same mods but in another order - match the order in the Mods menu. ";
+    return "Your mods differ from the host's - " + s + "Everybody needs exactly the same mods.";
+}
+static std::map<std::pair<int, uint64_t>, std::string> g_pendingMods;  // host: MODS lines of connections before their HELLO
 static bool g_relayUp;                       // host: the relay confirmed the room
 // Separate towns: every player starts the same brand-new map with an own town ("START n 0 NEW a,b,c,d,e TOWNS ids")
 static bool g_separate;                      // host's choice
@@ -357,6 +404,7 @@ static void Connect() {
     if (g_joinDelay) Sleep(g_joinDelay * 1000);
     const std::string addr = g_joinAddr.empty() ? g_host + ":" + std::to_string(g_port) : g_joinAddr;
     const std::string room = g_room;
+    for (int i = 0; i < 600 && !ModsKnown() && !g_testModsSet; i++) Sleep(100);  // the HELLO carries my mod list
     const std::string hello = Hello(!g_testName.empty() ? g_testName : g_helloName.empty() ? "slot" + std::to_string(g_slot) : g_helloName);
     int attempts = g_joinAddr.empty() ? 60 : 3;  // tests wait for the host to come up; players get an answer quickly
     bool reconnecting = false;
@@ -491,6 +539,10 @@ static void HostReceive(int kind, uint64_t key, const std::string& line) {
     int pid = kind == kLocal ? 0 : FindPeer((PeerKind)kind, key);
     std::string k = line.substr(0, line.find(' '));
     std::string rest = line.size() > k.size() ? line.substr(k.size() + 1) : "";
+    if (k == "MODS") {  // comes right before the HELLO: kept until then
+        if (pid < 0 && g_pendingMods.size() < 64) g_pendingMods[{kind, key}] = rest;
+        return;
+    }
     if (k == "HELLO") {
         if (pid >= 0) return;
         std::string version = "an older version";  // "HELLO @<build id> <name>"; older DLLs send just the name
@@ -516,6 +568,20 @@ static void HostReceive(int kind, uint64_t key, const std::string& line) {
             Push("MSG " + (rest.empty() ? std::string("a player") : rest) + " has a different version of the mod (" + version +
                  ", yours " + BuildId() + ") - you both need the same dinput8.dll");
             return;
+        }
+        {
+            auto pm = g_pendingMods.find({kind, key});
+            std::string theirMods = pm != g_pendingMods.end() ? pm->second : "";
+            if (pm != g_pendingMods.end()) g_pendingMods.erase(pm);
+            std::string diff = ModsDifference(MyMods(), theirMods);
+            if (!diff.empty()) {
+                Log("!! net(host): %s tried to join with other mods (theirs [%s], mine [%s]) - refused", rest.c_str(),
+                    theirMods.c_str(), MyMods().c_str());
+                PeerSend(Peer{(PeerKind)kind, key, rest}, "BADMODS " + diff);
+                Push("MSG " + (rest.empty() ? std::string("a player") : rest) +
+                     " couldn't join: their mods differ from yours (everybody needs exactly the same mods)");
+                return;
+            }
         }
         // a player coming back (dropped connection; the host may not have noticed yet): the old entry goes, so the lowest
         // free id - normally the old one, and with it the old town - is theirs again
@@ -932,6 +998,13 @@ static void JoinSteamLobby(uint64_t lobby) {
         return;
     }
     if (!steam::Init()) return;
+    if (ModsChangedSinceStart()) {
+        Log("net: lobby invite ignored - mods changed since the game started");
+        g_status = kRestartForMods;
+        g_notice = kRestartForMods;
+        g_noticeUntil = GetTickCount() + 10000;
+        return;
+    }
     Log("net: joining Steam lobby %llu", lobby);
     g_status = "joining the game...";
     steam::JoinLobby(lobby);
@@ -1036,6 +1109,7 @@ static void HostStatus() {
 static void DoHost(const std::string& arg) {
     if (g_mode != kOff) return;
     if (!gameload::InMenu()) { g_status = "go to the main menu first"; return; }
+    if (ModsChangedSinceStart()) { g_status = kRestartForMods; return; }
     std::string save = arg;
     g_separate = arg.compare(0, 2, "N|") == 0;
     g_sharedNew = arg.compare(0, 2, "M|") == 0;  // one shared town on a new map: everybody generates it, no file
@@ -1078,6 +1152,7 @@ static void DoHost(const std::string& arg) {
 static void DoJoin(const std::string& arg) {
     if (g_mode != kOff) return;
     if (!gameload::InMenu()) { g_status = "go to the main menu first"; return; }
+    if (ModsChangedSinceStart()) { g_status = kRestartForMods; return; }
     std::string v = arg.size() > 2 ? arg.substr(2) : "";
     while (!v.empty() && isspace((unsigned char)v.back())) v.pop_back();
     while (!v.empty() && isspace((unsigned char)v.front())) v.erase(0, 1);
@@ -1230,6 +1305,9 @@ void Init() {
             g_method = kViaRelay;
         } else if (k == "room") {
             g_room = v;
+        } else if (k == "fakemods") {  // test: pretend these other mods ("-" = none)
+            g_testMods = v == "-" ? "" : v;
+            g_testModsSet = true;
         } else if (k == "steamhost") {
             g_steamHostAuto = v != "0";
         } else if (k == "delay") {
@@ -1391,6 +1469,8 @@ static void WaitingNotice() {
 }
 
 void Frame() {
+    static int modsFrames;
+    if (modsFrames++ % 180 == 0) RefreshModsSignature();  // the Mods menu may change them (compared when joining)
     static bool steamTried;
     if (!steamTried && gameload::InMenu()) {
         steamTried = true;
@@ -1619,8 +1699,9 @@ void Frame() {
             float x = 0, y = 0;
             int got = sscanf_s(l.c_str() + (mark ? 5 : 4), "%d %f %f", &from, &x, &y);
             if (got >= 1 && from != g_me) {
-                std::string name = g_names.count(from) ? g_names[from] : "Player " + std::to_string(from);
-                int colour = towns::Count() > 1 && g_townOf.count(from) ? g_townOf[from] : from;
+                std::string name;
+                int colour;
+                PresenceIdentity(from, &name, &colour);
                 if (mark && got == 3) presence::OnPing(from, name, colour, x, y);
                 else if (!mark) presence::OnCursor(from, name, colour, got == 3, x, y);
             }
@@ -1648,6 +1729,10 @@ void Frame() {
             DoLeave();
             g_status = "different mod version: the host has " + hostId + ", you have " + BuildId() +
                        " - you both need the same dinput8.dll";
+        } else if (l.compare(0, 8, "BADMODS ") == 0) {  // BADMODS <what differs, from my side>
+            Log("!! net: refused - %s (mine: [%s])", l.c_str() + 8, MyMods().c_str());
+            DoLeave();
+            g_status = l.substr(8);
         } else if (l == "FULL") {
             Log("!! net: the host's game has already started");
             g_status = "that game has already started";
@@ -1843,6 +1928,10 @@ void SendPresence(const std::string& line) {
     if (g_active && (g_mode == kHost ? g_hostStarted : g_started)) SendLine(line);
 }
 int Me() { return g_me; }
+void PresenceIdentity(int player, std::string* name, int* colour) {  // the name and colour pings/cursors show
+    *name = g_names.count(player) ? g_names[player] : "Player " + std::to_string(player);
+    *colour = towns::Count() > 1 && g_townOf.count(player) ? g_townOf[player] : player;
+}
 
 std::string TradeNews() { return g_tradeNews; }
 void SetTradeNews(const std::string& s) { g_tradeNews = s; }
