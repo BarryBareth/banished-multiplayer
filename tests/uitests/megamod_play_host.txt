@@ -1,0 +1,21 @@
+# MegaMod sync test, host (town 1 at about 205,225): builds a small town over two years, changes jobs
+# (template names the game doesn't know are logged as "unknown template" and skipped)
+50 cmd win 10 0 0 5 1 - 0
+200 build Template\StorageBarn.rsc valid 210 230
+400 build Template\WoodHouse.rsc valid 200 220
+600 build Template\WoodHouse.rsc valid 214 220
+800 build Template\GathererShelter.rsc valid 190 235
+1000 build Template\HuntingLodge.rsc valid 225 240
+1200 build Template\ForesterLodge.rsc valid 185 215
+1400 build Template\Well.rsc valid 205 212
+3000 cmd win 10 0 0 2 2 - 0
+3500 build Template\WoodCutter.rsc valid 220 210
+4000 build Template\StorageYard.rsc valid 196 240
+6000 build Template\WoodHouse.rsc valid 222 226
+8000 build Template\Tailor.rsc valid 230 222
+10000 build Template\School.rsc valid 198 205
+12000 cmd win 10 0 0 3 3 - 0
+15000 build Template\WoodHouse.rsc valid 190 222
+20000 build Template\Blacksmith.rsc valid 235 232
+25000 build Template\TradingPost.rsc valid 180 245
+30000 towns

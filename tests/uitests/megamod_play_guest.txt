@@ -1,0 +1,15 @@
+# MegaMod sync test, guest (town 2 at about 305,190): builds its own small town, changes jobs
+50 cmd win 10 0 0 5 1 - 0
+250 build Template\StorageBarn.rsc valid 310 195
+450 build Template\WoodHouse.rsc valid 300 185
+650 build Template\WoodHouse.rsc valid 315 185
+850 build Template\GathererShelter.rsc valid 295 200
+1050 build Template\HuntingLodge.rsc valid 325 205
+1250 build Template\Well.rsc valid 305 178
+3200 build Template\ForesterLodge.rsc valid 290 180
+5000 cmd win 10 0 0 2 2 - 0
+6500 build Template\WoodHouse.rsc valid 320 192
+9000 build Template\WoodCutter.rsc valid 285 192
+14000 build Template\School.rsc valid 300 170
+18000 build Template\WoodHouse.rsc valid 292 210
+24000 build Template\Tailor.rsc valid 330 185

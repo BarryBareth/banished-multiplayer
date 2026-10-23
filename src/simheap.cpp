@@ -62,6 +62,8 @@ void NewGeneration() {
     // next commit-step boundary (committed memory grows from g_base in kCommitStep steps)
     size_t used = (size_t)(g_top - g_base);
     uint8_t* keepFrom = g_genBase;  // the generation that just ended stays; everything before it may go
+    static const bool keepAll = GetFileAttributesW(L"bmp_nodecommit.txt") != INVALID_FILE_ATTRIBUTES;  // test
+    if (keepAll) keepFrom = g_base;
     for (size_t c = 0; g_base + (c + 1) * kChunk <= keepFrom && g_base + (c + 1) * kChunk <= g_committed; c++) {
         if (g_chunkLive[c] || g_chunkGone[c]) continue;
         if (VirtualFree(g_base + c * kChunk, kChunk, MEM_DECOMMIT)) {

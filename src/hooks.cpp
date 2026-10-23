@@ -294,9 +294,11 @@ void ProbeDumpRecentDraws(const char* why) {
     Log("wrote the last %zu draws to %ls (%s)", n, path, why);
 }
 
+static void* ParticleRng();
 static void RngNote(void* self, void* ret, uint64_t value, int32_t a = 0, int32_t b = 0) {
     if (GetCurrentThreadId() != g_mainThread) { InterlockedIncrement64((LONG64*)&g_s.offThreadCalls); return; }
     uint32_t id = CodeId(ret);
+    if (self == ParticleRng()) return;  // a particle draw between steps (rendering): not part of the simulation
     if (InSim()) {
         bool factory = self == FactoryRng();
         if (!factory) RingAdd(id, value, a, b);
@@ -329,7 +331,20 @@ static void* SimRng() {
 // Same for the object handle-tag RNG (InternalFactory+0x20): UI objects created between ticks must not shift
 // the tags later handed to sim objects. (Draws during a tick stay on it, so sim-object tags match everywhere.)
 alignas(16) static uint8_t g_uiTagRng[0x9d0];
+// Graphics::Particle::_rng: the particle effects' generator, drawn every rendered frame (its state differs per PC).
+// A tornado's particles are updated INSIDE the sim step (TornadoComponent -> Tornado::vf11 exe+0xd7940), and the
+// tornado ends when its particles have died out - so their random lifetimes decide sim state. 2026-10-22: the same
+// tornado lived a different time on two PCs (desync), and as particle state isn't saved, every resync diverged again
+// at tick 600. In-sim particle draws use this generator instead: reseeded the same way at every load, on every PC.
+alignas(16) static uint8_t g_simParticleRng[0x9d0];
+static bool g_simParticleRngReady;
+static void* ParticleRng() {
+    static void* rng = RuntimeExport("?_rng@Particle@Graphics@@1VRandom@System@@A");
+    return rng;
+}
 static void* RedirectOutsideTick(void* self) {
+    if (self == ParticleRng() && g_simParticleRngReady && InSim() && GetCurrentThreadId() == g_mainThread)
+        return g_simParticleRng;
     if (!InSim() && g_uiRngReady && g_s.loop && GetCurrentThreadId() == g_mainThread) {
         if (self == SimRng()) { g_redirected++; return g_uiRng; }
         if (self == FactoryRng()) return g_uiTagRng;
@@ -953,6 +968,35 @@ static std::string g_modSig;
 // Mods switched on or off in the Mods menu without restarting leave the old mods' resources half loaded: that game
 // drifts from everybody else's and crashed reloading at the resync (2026-10-21, MegaMod switched off then hosting).
 static std::string g_modSigStart;  // the list the game started with
+// A mod file's size (0 = unknown). The game's path may be UTF-8 (non-English folder names) or relative to the game's
+// folder; ANSI GetFileAttributesExA failed for every mod on a friend's PC (2026-10-22).
+static unsigned long long ModFileSize(const char* path) {
+    auto sizeOf = [](const std::wstring& p) -> unsigned long long {
+        WIN32_FILE_ATTRIBUTE_DATA fa{};
+        return GetFileAttributesExW(p.c_str(), GetFileExInfoStandard, &fa)
+                   ? ((unsigned long long)fa.nFileSizeHigh << 32) | fa.nFileSizeLow : 0;
+    };
+    std::vector<std::wstring> tries;
+    for (UINT cp : {CP_UTF8, CP_ACP}) {
+        int n = MultiByteToWideChar(cp, cp == CP_UTF8 ? MB_ERR_INVALID_CHARS : 0, path, -1, nullptr, 0);
+        if (n <= 0) continue;
+        std::wstring w(n - 1, L'\0');
+        MultiByteToWideChar(cp, 0, path, -1, w.data(), n);
+        tries.push_back(w);
+        bool relative = !(w.size() > 1 && w[1] == L':') && !(w.size() > 1 && w[0] == L'\\' && w[1] == L'\\');
+        if (relative) {  // relative: to the game's folder
+            wchar_t exe[MAX_PATH];
+            GetModuleFileNameW(nullptr, exe, MAX_PATH);
+            *(wcsrchr(exe, L'\\') + 1) = 0;
+            tries.push_back(std::wstring(exe) + w);
+        }
+    }
+    for (auto& t : tries)
+        if (unsigned long long s = sizeOf(t)) return s;
+    static int logged;
+    if (logged++ < 20) Log("!! mods: couldn't read the size of '%s' (error %lu) - compared by name only", path, GetLastError());
+    return 0;
+}
 static volatile bool g_modsChanged;
 void RefreshModsSignature() {
     static void* (*getMods)() = (void* (*)())RuntimeExport("?Get@Modification@IO@@SAPEAV12@XZ");
@@ -966,12 +1010,20 @@ void RefreshModsSignature() {
         if (!path || !m[0x50] || strstr(path, "bmpShare")) continue;
         const char* base = path;
         for (const char* p = path; *p; p++) if (*p == '\\' || *p == '/') base = p + 1;
-        WIN32_FILE_ATTRIBUTE_DATA fa{};
-        unsigned long long size = GetFileAttributesExA(path, GetFileExInfoStandard, &fa) ? ((unsigned long long)fa.nFileSizeHigh << 32) | fa.nFileSizeLow : 0;
+        unsigned long long size = ModFileSize(path);
         std::string name = base;
         for (auto& c : name) if (c == ';' || c == ':' || c == '\n' || c == '\r') c = '_';
         sig += (sig.empty() ? "" : ";") + name + ":" + std::to_string(size);
     }
+    // The BanishedPerf DLL (dbghelp.dll) names its simulation-changing settings (e.g. delayed paths) as one more entry:
+    // every player needs the same. Its vanilla-exact default names none, so it plays with or without it.
+    if (HMODULE perf = GetModuleHandleW(L"dbghelp.dll"))
+        if (auto simSig = (const char*(__stdcall*)())GetProcAddress(perf, "BperfSimSignature"))
+            if (const char* s = simSig(); s && *s) {
+                std::string name = s;
+                for (auto& c : name) if (c == ';' || c == ':' || c == '\n' || c == '\r') c = '_';
+                sig += (sig.empty() ? "" : ";") + name + ":1";
+            }
     std::lock_guard<std::mutex> l(g_modSigMx);
     if (sig != g_modSig) Log("mods: %s", sig.empty() ? "no other mods enabled" : sig.c_str());
     if (!g_modSigKnown) g_modSigStart = sig;
@@ -1017,8 +1069,9 @@ static void __fastcall h_LoaderStartup(void* self) {
     g_pendingFreeLogs.clear();
     simheap::NewGeneration();
     { std::lock_guard<std::mutex> lock(g_ctorMutex); g_ctorCounts.clear(); }
+    if (g_simParticleRngReady) o_RandInit(g_simParticleRng, 0x0033CC33);  // in-sim particle draws: same on every PC
     commands::OnNewSession();
-    Log("loader startup: new sim-heap generation %llu", simheap::GetStats().generation);
+    Log("loader startup: new sim-heap generation %llu (starts at %p)", simheap::GetStats().generation, simheap::FromOffset(0));
     towns::OnLoadStart();
     o_LoaderStartup(self);
 }
@@ -1402,11 +1455,13 @@ void InstallHooks() {
     CleanOldLogs(path);
     // the per-tick log grows ~1 GB an hour of play (a user had a 3.8 GB one): only for tests (bmp_autotest.txt) or with
     // <game>\bmp_tickslog.txt. Desyncs in normal play are diagnosed from the bmp_desync_*.log ring dumps.
-    if (GameFileExists(L"bmp_autotest.txt") || GameFileExists(L"bmp_tickslog.txt")) g_ticks = _wfsopen(path, L"w", _SH_DENYNO);
+    // <game>\bmp_nologs.txt keeps the harness's two logs off (performance measurements of a normal game).
+    bool harnessLogs = GameFileExists(L"bmp_autotest.txt") && !GameFileExists(L"bmp_nologs.txt");
+    if (harnessLogs || GameFileExists(L"bmp_tickslog.txt")) g_ticks = _wfsopen(path, L"w", _SH_DENYNO);
     if (g_ticks) fprintf(g_ticks, "# tick calls hash chain sim sim_calls sim_hash sim_chain outside off\n");
     // the per-draw log (~150 MB a session) only for tests: the harness (bmp_autotest.txt) or <game>\bmp_drawlog.txt
     memcpy(wcsstr(path, L"bmp_ticks_"), L"bmp_draws_", 10 * sizeof(wchar_t));
-    if (GameFileExists(L"bmp_autotest.txt") || GameFileExists(L"bmp_drawlog.txt")) {
+    if (harnessLogs || GameFileExists(L"bmp_drawlog.txt")) {
         g_draws = _wfsopen(path, L"w", _SH_DENYNO);
         if (g_draws) fprintf(g_draws, "# tick F(actory handle tag)/S(im) caller_id value\n");
     }
@@ -1458,7 +1513,13 @@ void InstallHooks() {
     Hook("?Startup@LoaderLoop@Engine@@UEAAXXZ", (void*)h_LoaderStartup, (void**)&o_LoaderStartup);
     Hook("?Update@MeshInstance@Graphics@@UEAAXAEBVTime@System@@@Z", (void*)h_MeshInstanceUpdate, (void**)&o_MeshInstanceUpdate);
 
-    Log("simheap init: %s", simheap::Init() ? "ok" : "FAILED");
+    {
+        bool ok = simheap::Init();
+        uint8_t* base = nullptr;
+        size_t committed = 0;
+        simheap::Range(&base, &committed);
+        Log("simheap init: %s (base %p)", ok ? "ok" : "FAILED", base);
+    }
     {
         wchar_t name[64];
         swprintf_s(name, L"bmp_heapjitter%s.txt", SlotSuffix());
@@ -1536,6 +1597,8 @@ void InstallHooks() {
         o_RandSeedCtor(g_uiRng, 0x0011AA11);
         o_RandSeedCtor(g_uiTagRng, 0x0022BB22);
         g_uiRngReady = true;
+        o_RandSeedCtor(g_simParticleRng, 0x0033CC33);  // reseeded at every load (h_LoaderStartup)
+        g_simParticleRngReady = ParticleRng() != nullptr;
     }
     Hook("?Update@MainLoop@Engine@@QEAA_NAEBVTime@System@@@Z", (void*)h_MainLoopUpdate, (void**)&o_MainLoopUpdate);
     Hook("?Update@AchievementManager@Achievement@@QEAAXAEBVTime@System@@@Z", (void*)h_AchievementUpdate, (void**)&o_AchievementUpdate);

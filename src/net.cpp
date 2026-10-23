@@ -106,7 +106,7 @@ static SOCKET g_listenSock = INVALID_SOCKET; // host: direct TCP listener
 
 // Every player must run the identical DLL - any code difference can desync. The build id = release number + a hash of
 // this DLL's code section as stored on disk (in memory it is relocated); HELLO carries it, the host turns away others.
-static constexpr const char* kModVersion = "0.9.5";
+static constexpr const char* kModVersion = "0.9.6";
 static std::string g_fakeVersion;
 static int64_t g_testDropAt = -1;
 static bool g_testCorruptSave;  // bmp_net.txt corruptsave=1 (test): the first save received counts as corrupt
@@ -170,7 +170,8 @@ static bool g_testModsSet;
 static std::string MyMods() { return g_testModsSet ? g_testMods : ModsSignature(); }
 
 static const char kRestartForMods[] =
-    "You changed mods since starting Banished - restart the game before playing multiplayer";
+    "Your mods changed since Banished started (in the Mods menu, or by loading a save made with other mods) - restart "
+    "the game before playing multiplayer";
 
 // "MODS <file:size;...>" goes first (the host compares it at the HELLO), then the HELLO itself
 static std::string Hello(const std::string& name) {
@@ -196,6 +197,15 @@ static std::string ModsDifference(const std::string& host, const std::string& gu
         return v;
     };
     auto h = split(host), g = split(guest);
+    // a size of 0 (or none) = that PC couldn't read the file's size: the name alone has to match (2026-10-22: a
+    // friend's PC sent 0 for every mod - same mods, refused)
+    auto sameSize = [](const std::string& a, const std::string& b) {
+        return a == b || a.empty() || b.empty() || a == "0" || b == "0";
+    };
+    bool same = h.size() == g.size();
+    for (size_t i = 0; same && i < h.size(); i++)
+        same = _stricmp(h[i].first.c_str(), g[i].first.c_str()) == 0 && sameSize(h[i].second, g[i].second);
+    if (same) return "";
     auto find = [](const std::vector<std::pair<std::string, std::string>>& v, const std::string& n) {
         for (auto& e : v) if (_stricmp(e.first.c_str(), n.c_str()) == 0) return &e;
         return (const std::pair<std::string, std::string>*)nullptr;
@@ -204,7 +214,7 @@ static std::string ModsDifference(const std::string& host, const std::string& gu
     for (auto& e : h) {
         auto* m = find(g, e.first);
         if (!m) missing += (missing.empty() ? "" : ", ") + e.first;
-        else if (m->second != e.second) other += (other.empty() ? "" : ", ") + e.first;
+        else if (!sameSize(m->second, e.second)) other += (other.empty() ? "" : ", ") + e.first;
     }
     for (auto& e : g) if (!find(h, e.first)) extra += (extra.empty() ? "" : ", ") + e.first;
     std::string s;

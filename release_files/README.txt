@@ -87,7 +87,7 @@ PROBLEMS
 - "Different mod version": you and the host have different versions. Both install the same zip.
 - "Your mods differ from the host's": other mods work only if every player has exactly the same ones
   (same files, same versions, same order in the Mods menu). The message says which ones differ.
-- "You changed mods since starting Banished": after switching mods on or off, restart the game
+- "Your mods changed since Banished started": after switching mods on or off (or loading a save made with other mods), restart the game
   before hosting or joining.
 - Pings make a sound but you don't see them: the mod draws on screen (pings, cursors, the bar)
   only with the DirectX 11 renderer - choose it in Banished's video options.
