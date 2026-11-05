@@ -1184,11 +1184,8 @@ static const uintptr_t kRvaLaborBalance = 0xd9880;
 // break that: 2026-10-21 (3 players, a workplace shared with two towns, unshared, a month later) it crashed with no
 // share left. So every workplace in the town's tree counts, during the call, only the town's own adults working there
 // - in a normal game that is already the case and nothing changes.
-static void __fastcall h_LaborBalance(void* p) {
-    uint8_t* gl = GameLoop();
-    uint8_t* town = gl && g_towns.size() > 1 ? *(uint8_t**)(gl + 0xf0) : nullptr;
-    static const bool off = GetFileAttributesW(L"bmp_nolaborfix.txt") != INVALID_FILE_ATTRIBUTES;  // test: the game's
-    if (!town || off) return o_LaborBalance(p);
+// Lowers every workplace's count in town's tree to the town's own adults working there; returns what to add back.
+static std::vector<std::pair<uint8_t*, int>> HideOtherWorkers(uint8_t* town, const char* what) {
     std::unordered_map<void*, int> own;  // workplace -> the town's adults working there
     for (int i = 0; i < *(int*)(town + 0xa8); i++) {
         uint8_t* cit = (*(uint8_t***)(town + 0xa0))[i];
@@ -1215,15 +1212,42 @@ static void __fastcall h_LaborBalance(void* p) {
             if (!WorkShareMaskOf(arr[i])) {
                 static int logged;
                 if (logged++ < 20)
-                    Log("towns: labor rebalance of town %d: %d worker(s) at a workplace (%p, owner %d, not shared) are "
-                        "not its own adults - left out", Current(), extra, arr[i], OwnerOf(arr[i]));
+                    Log("towns: %s of town %d: %d worker(s) at a workplace (%p, owner %d, not shared) are "
+                        "not its own adults - left out", what, Current(), extra, arr[i], OwnerOf(arr[i]));
             }
         }
         if (uint8_t* l = *(uint8_t**)(node + 0x20)) nodes.push_back(l);
         if (uint8_t* r = *(uint8_t**)(node + 0x28)) nodes.push_back(r);
     }
-    o_LaborBalance(p);
+    return hidden;
+}
+static void ShowOtherWorkers(const std::vector<std::pair<uint8_t*, int>>& hidden) {
     for (auto& [comp, extra] : hidden) *(int*)(comp + 0x60) += extra;
+}
+static void __fastcall h_LaborBalance(void* p) {
+    uint8_t* gl = GameLoop();
+    uint8_t* town = gl && g_towns.size() > 1 ? *(uint8_t**)(gl + 0xf0) : nullptr;
+    static const bool off = GetFileAttributesW(L"bmp_nolaborfix.txt") != INVALID_FILE_ATTRIBUTES;  // test: the game's
+    if (!town || off) return o_LaborBalance(p);
+    auto hidden = HideOtherWorkers(town, "labor rebalance");
+    o_LaborBalance(p);
+    ShowOtherWorkers(hidden);
+}
+
+// Taking a worker away from a profession ("-" in the professions window; exe+0x96650(town, profession)): with nobody
+// idle in it, the game picks the town's workplace of that profession with the highest worker count (+0x60) and takes
+// the first villager of its worker list (+0x58) - a count higher than the villagers really there gave a null one
+// (crash at exe+0x9695a reading +0x1f0, a player's 2-town game 2026-11-04; tests/uitests/ghost_remove.txt). The same
+// cure as the labor rebalance: during the call each workplace counts only the town's own adults working there.
+using RemoveWorker_t = void(__fastcall*)(uint8_t* town, void* profession);
+static RemoveWorker_t o_RemoveWorker;
+static const uintptr_t kRvaRemoveWorker = 0x96650;
+static void __fastcall h_RemoveWorker(uint8_t* town, void* profession) {
+    static const bool off = GetFileAttributesW(L"bmp_noremovefix.txt") != INVALID_FILE_ATTRIBUTES;  // test: the game's
+    if (!town || off) return o_RemoveWorker(town, profession);
+    auto hidden = HideOtherWorkers(town, "worker removal");
+    o_RemoveWorker(town, profession);
+    ShowOtherWorkers(hidden);
 }
 
 // The rebalance's last step (exe+0xdb290..db2ae) gives the villagers left over (taken from a job, not picked by any
@@ -2598,6 +2622,7 @@ void Install() {
         {kRvaWorkMapRemove, (void*)h_WorkMapRemove, (void**)&o_WorkMapRemove, "WorkMapRemove"},
         {kRvaStorageRemove, (void*)h_StorageRemove, (void**)&o_StorageRemove, "StorageRemove (watch)"},
         {kRvaLaborBalance, (void*)h_LaborBalance, (void**)&o_LaborBalance, "LaborBalance"},
+        {kRvaRemoveWorker, (void*)h_RemoveWorker, (void**)&o_RemoveWorker, "RemoveWorker"},
         {kRvaBuildRoadTry, (void*)h_BuildRoadTry, (void**)&o_BuildRoadTry, "BuildRoadTry"},
         {kRvaPickupTaken, (void*)h_PickupTaken, (void**)&o_PickupTaken, "PickupTaken"},
         {kRvaFindStorage, (void*)h_FindStorage, (void**)&o_FindStorage, "FindStorage"},

@@ -1,0 +1,14 @@
+# host: a gatherer hut whose worker count says one more than really work there, then the player takes gatherers away
+# ("-" in the professions window) until none are left - the remove-worker routine (exe+0x96650) picks the workplace
+# with the most workers by that count and reads its first worker: a null one crashed a player's game on 2026-11-04
+# (exe+0x9695a, read of 0x1f0, from commands::ExecuteWindow kWorker)
+50 cmd win 10 0 0 5 1 - 0
+100 build Template\GathererShelter.rsc near 205 225
+3000 open @GathererShelter
+3010 state
+3020 close
+3500 ghostworker @GathererShelter 1
+3600 cmd win 10 0 0 -10 1 - 0
+3700 open @GathererShelter
+3710 state
+3720 close
